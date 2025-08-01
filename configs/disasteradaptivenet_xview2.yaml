@@ -4,5 +4,5 @@ MODEL:
   TYPE: 'disasteradaptivenet'
 
 DATASET:
-  SPLIT: 'legacy'
+  SPLIT: 'xview2'
   INCLUDE_CONDITIONING_INFORMATION: True
