@@ -224,11 +224,31 @@ class DisasterAdaptiveNet(Siamese, Res34_Unet_Loc):
         return self.res(torch.cat([output1, output2], 1))
 
 
+class DisasterAdaptiveNetPost(Siamese, Res34_Unet_Loc):
+    """ ResNet34 Unet model for classification tasks."""
+
+    def __init__(self, cfg) -> None:
+        super(DisasterAdaptiveNetPost, self).__init__(cfg)
+        decoder_filters = np.asarray([48, 64, 96, 160, 320])
+        self.res = nn.Conv2d(decoder_filters[-5], self.cfg.MODEL.OUT_CHANNELS, 1, stride=1, padding=0)
+        self.conditioning_layer = FiLM(len(cfg.DATASET.CONDITIONING_KEY), decoder_filters[0])
+
+    def forward(self, x: torch.Tensor, lookup_tensor: torch.Tensor = None) -> torch.Tensor:
+        """ Forward pass  for two inputs (that have been concateneted chanelwise to one). """
+        # output1 = self.forward_once(x[:, :3, :, :])
+        output2 = self.forward_once(x[:, 3:, :, :])
+        if lookup_tensor is not None:
+            output2 = self.conditioning_layer(output2, lookup_tensor)
+        return self.res(output2)
+
+
 def create_network(cfg) -> torch.nn.Module:
     if cfg.MODEL.TYPE == 'strongbaseline':
         net = StrongBaselineNet(cfg)
     elif cfg.MODEL.TYPE == 'disasteradaptivenet':
         net = DisasterAdaptiveNet(cfg)
+    elif cfg.MODEL.TYPE == 'disasteradaptivenetpost':
+        net = DisasterAdaptiveNetPost(cfg)
     else:
         raise Exception(f'Unknown network ({cfg.MODEL.TYPE}).')
     return nn.DataParallel(net)

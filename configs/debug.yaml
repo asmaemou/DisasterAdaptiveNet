@@ -1,4 +1,4 @@
-_BASE_: "disasteradaptivenet_event.yaml"
+_BASE_: "disasteradaptivenetpost_xview2.yaml"
 DEBUG: True
 
 TRAINER:
