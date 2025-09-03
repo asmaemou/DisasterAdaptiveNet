@@ -1,10 +1,10 @@
 # DisasterAdaptiveNet
 
 
-This repository contains the official code for the following paper:
+This repository contains the official code for the following [paper](https://doi.org/10.1016/j.jag.2025.104756):
 
-Hafner, S.\*, Gerard, S.\*, Sullivan, J. and Ban, Y., 2025. DisasterAdaptiveNet: A Robust Network for Multi-Hazard Building Damage Detection from Very-High-Resolution Satellite Imagery. International Journal of Applied Earth Observation and Geoinformation, (under review).
-\* Equal contributions
+Hafner, S.\*, Gerard, S.\*, Sullivan, J. and Ban, Y., 2025. DisasterAdaptiveNet: A Robust Network for Multi-Hazard Building Damage Detection from Very-High-Resolution Satellite Imagery. International Journal of Applied Earth Observation and Geoinformation, 143, 104756.
+ \* Equal contributions
 
 
 ![alt text](imgs/disasteradaptivenet.png)
@@ -114,5 +114,13 @@ If you find this work useful, please consider citing:
 
 
   ```bibtex
-
+@article{hafner2025disasteradaptivenet,
+     title={DisasterAdaptiveNet: A robust network for multi-hazard building damage detection from very-high-resolution satellite imagery},
+     author={Hafner, Sebastian and Gerard, Sebastian and Sullivan, Josephine and Ban, Yifang},
+     journal={International Journal of Applied Earth Observation and Geoinformation},
+     volume={143},
+     pages={104756},
+     year={2025},
+     publisher={Elsevier}
+}
   ```
