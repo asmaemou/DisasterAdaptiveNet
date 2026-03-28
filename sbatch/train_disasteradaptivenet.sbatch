@@ -9,6 +9,8 @@
 #SBATCH --job-name=disasteradaptivenet_train
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
+#SBATCH -w gpu202401
+
 
 set -euo pipefail
 export PYTHONUNBUFFERED=1
