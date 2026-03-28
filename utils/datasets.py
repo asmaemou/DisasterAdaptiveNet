@@ -55,10 +55,17 @@ class AbstractxBDDataset(torch.utils.data.Dataset):
         # 0: background, 1: building
         msk_pre_file = self.root_path / subset / 'masks' / f'{event}_{patch_id}_pre_disaster.png'
         msk_pre = cv2.imread(str(msk_pre_file), cv2.IMREAD_UNCHANGED)
-        msk_pre = msk_pre.astype(np.float32) / 255
+
         # 0: background, 1: no damage, 2: minor damage, 3: major damage, 4: destroyed
         msk_post_file = self.root_path / subset / 'masks' / f'{event}_{patch_id}_post_disaster.png'
         msk_post = cv2.imread(str(msk_post_file), cv2.IMREAD_UNCHANGED)
+
+        if msk_pre is None:
+            raise FileNotFoundError(f"Could not read pre-mask: {msk_pre_file}")
+        if msk_post is None:
+            raise FileNotFoundError(f"Could not read post-mask: {msk_post_file}")
+
+        msk_pre = msk_pre.astype(np.float32) / 255
         return msk_pre, msk_post
 
     def get_samples_legacy(self) -> Dict:
