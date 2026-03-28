@@ -18,7 +18,7 @@ random.seed(1)
 sys.setrecursionlimit(10000)
 
 ###To be changed####
-dataset_dir = Path('C:/Users/shafner/datasets/xview2')
+dataset_dir = Path('/homes/j244s673/documents/wsu/phd/xview2')
 dirs = ['hold', 'test', 'tier3', 'train']
 
 
