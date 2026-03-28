@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -p killable.q
+#SBATCH -p wsu_soc_kshirsagar.q
 #SBATCH -N 1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
@@ -9,7 +9,6 @@
 #SBATCH --job-name=disasteradaptivenet_train
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
-#SBATCH -w gpu202401
 
 
 set -euo pipefail
