@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -p killable
+#SBATCH -p killable.q
 #SBATCH -N 1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
