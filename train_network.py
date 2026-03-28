@@ -141,12 +141,12 @@ if __name__ == '__main__':
     print('=== Runnning on device: p', device)
 
     wandb.init(
-        name=cfg.NAME,
-        config=cfg,
-        project='disasteradaptivenet',
-        tags=['building localization', 'damage detection', 'xBD', ],
-        mode='online' if not cfg.DEBUG else 'disabled',
-    )
+    name=cfg.NAME,
+    config=cfg,
+    project='disasteradaptivenet',
+    tags=['building localization', 'damage detection', 'xBD'],
+    mode='disabled',
+)
 
     try:
         run_training(cfg)
