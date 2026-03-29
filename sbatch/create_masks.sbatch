@@ -27,7 +27,7 @@ else
 fi
 
 eval "$("$CONDA_EXE" shell.bash hook)"
-conda activate disasteradaptivenet
+conda activate disasteradaptivenet_cu128
 
 echo "===== JOB INFO ====="
 date

@@ -32,7 +32,7 @@ else
 fi
 
 eval "$("$CONDA_EXE" shell.bash hook)"
-conda activate disasteradaptivenet
+conda activate disasteradaptivenet_cu128
 
 export WANDB_MODE=offline
 export WANDB_DISABLE_SERVICE=true
