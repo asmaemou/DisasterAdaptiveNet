@@ -17,7 +17,7 @@ export PYTHONUNBUFFERED=1
 cd /homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
 mkdir -p logs
 
-XBD_ROOT=/homes/j244s673/documents/wsu/phd/uda_two_stage/xbd
+XBD_ROOT=/homes/j244s673/documents/wsu/phd/xview2
 
 if [ -x "$HOME/miniforge3/bin/conda" ]; then
   CONDA_EXE="$HOME/miniforge3/bin/conda"
