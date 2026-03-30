@@ -19,7 +19,7 @@ if __name__ == '__main__':
     t0 = timeit.default_timer()
 
     args = parsers.argument_parser().parse_known_args()[0]
-    disable_cond = parsers.str2bool(args.disable_cond)
+    disable_cond = parsers.str2bool(getattr(args, "disable_cond", "false"))
     cfg = experiment_manager.setup_cfg(args)
 
     np.random.seed(cfg.SEED)
