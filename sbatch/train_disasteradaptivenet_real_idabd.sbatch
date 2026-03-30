@@ -40,6 +40,6 @@ nvidia-smi || true
 echo "===================="
 
 python -u train_network_idabd.py \
-  -c idabd_real_disasteradaptivenet \
+  -c disasteradaptivenet_idabd_real \
   -o "$RUN_DIR" \
   -d "$IDABD_ROOT"

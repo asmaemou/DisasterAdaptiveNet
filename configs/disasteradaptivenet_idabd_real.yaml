@@ -1,0 +1,28 @@
+_BASE_: "base.yaml"
+
+MODEL:
+  TYPE: 'disasteradaptivenet'
+
+DATASET:
+  NAME: 'IdaBDReal'
+  SPLIT: 'idabd'
+  OVERSAMPLE_BUILDINGS: False
+  INCLUDE_CONDITIONING_INFORMATION: True
+  EXCLUDE_UNDAMAGED: False
+  EXCLUDE_EVENTS: []
+  TRAIN_EVENTS: []
+  TEST_EVENTS: []
+  EVENT_CONDITIONING: {
+    'hurricane-ida': 'storm',
+  }
+  CONDITIONING_KEY: {
+    'wildfire': 0,
+    'volcano': 1,
+    'earthquake': 2,
+    'storm': 3,
+    'flood': 4,
+  }
+
+INFERENCE:
+  USE_TRICKS: False
+  USE_ALL_FLIPS: True
