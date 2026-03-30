@@ -8,7 +8,7 @@ random.seed(42)
 
 RAW_ROOT = Path(
     "/homes/j244s673/documents/wsu/phd/idabd_real/PRJ-3563/"
-    "Project--ida-bd-pre-and-post-disaster-high-resolution-satellite-imagery-for-building-damage-assessment-from-hurricane-ida"
+    "Project--ida-bd-pre-and-post-disaster-high-resolution-satellite-imagery-for-building-damage-assessment-from-hurricane-ida/data"
 )
 
 IMG_DIR = RAW_ROOT / "images"
