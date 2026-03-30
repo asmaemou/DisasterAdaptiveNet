@@ -108,7 +108,7 @@ class RowPairCalculator:
         # loc prediction, dmg prediction, loc target, dmg target
         lp, dp, lt, dt = ph.load_images()
 
-        if ph.cfg.INFERENCE.REGRESSION:
+        if getattr(ph.cfg.INFERENCE, "REGRESSION", False):
             # convert damage regression to damage classes
             dp = dp / 255  # rescale [0, 1]
 
