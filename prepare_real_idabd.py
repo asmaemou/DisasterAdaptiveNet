@@ -74,17 +74,14 @@ for split, split_pairs in split_map.items():
     patch_entries = []
 
     for event, patch_id in split_pairs:
-        # copy paired images
         for suffix in ["pre", "post"]:
             img_name = f"{event}_{patch_id}_{suffix}_disaster.png"
             shutil.copy2(IMG_DIR / img_name, OUT_ROOT / split / "images" / img_name)
 
-        # copy paired masks
         for suffix in ["pre", "post"]:
             msk_name = f"{event}_{patch_id}_{suffix}_disaster.png"
             shutil.copy2(MSK_DIR / msk_name, OUT_ROOT / split / "masks" / msk_name)
 
-        # create targets from masks
         shutil.copy2(
             MSK_DIR / f"{event}_{patch_id}_pre_disaster.png",
             OUT_ROOT / split / "targets" / f"{event}_{patch_id}_pre_disaster_target.png",
