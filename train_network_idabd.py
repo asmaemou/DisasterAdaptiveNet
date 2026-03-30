@@ -10,9 +10,51 @@ import wandb
 import numpy as np
 import random
 
-from utils import losses, evaluation, experiment_manager, parsers, schedulers, measurers, metrics, models
+from utils import losses, experiment_manager, parsers, schedulers, measurers, metrics, models
 from utils.experiment_manager import CfgNode
 from utils.datasets_idabd import IdaBDDataset
+
+
+def simple_val(net, cfg, device):
+    dataset = IdaBDDataset(cfg, run_type="val", disable_augmentations=True)
+    loader = torch_data.DataLoader(
+        dataset,
+        batch_size=1,
+        num_workers=0 if cfg.DEBUG else cfg.DATALOADER.NUM_WORKER,
+        shuffle=False,
+        pin_memory=True,
+    )
+
+    criterion = losses.ComboLoss(weights=cfg.TRAINER.LOSS.WEIGHTS)
+    class_weights = losses.loss_class_weights(cfg.TRAINER.LOSS.CLASS_WEIGHTS, dataset.get_class_counts())
+
+    total_loss = 0.0
+    n = 0
+
+    net.eval()
+    with torch.no_grad():
+        for batch in loader:
+            x, msk = batch["img"].to(device), batch["msk"].to(device)
+
+            if cfg.DATASET.INCLUDE_CONDITIONING_INFORMATION:
+                x_cond = batch["cond_id"].to(device)
+                logits = net(x, x_cond)
+            else:
+                logits = net(x)
+
+            loss_loc = criterion(logits[:, 0], msk[:, 0].long()) * class_weights[0]
+
+            loss_dmg = torch.tensor([0.0], device=device)
+            for c in range(1, logits.size(1)):
+                loss_dmg = loss_dmg + criterion(logits[:, c], msk[:, c].long()) * class_weights[c]
+
+            loss = loss_loc + loss_dmg
+            total_loss += loss.item()
+            n += 1
+
+    val_loss = total_loss / max(n, 1)
+    print(f"[val] loss={val_loss:.6f}")
+    return -val_loss
 
 
 def run_training(cfg: CfgNode):
@@ -31,14 +73,14 @@ def run_training(cfg: CfgNode):
     print(dataset)
     class_weights = losses.loss_class_weights(cfg.TRAINER.LOSS.CLASS_WEIGHTS, dataset.get_class_counts())
 
-    dataloader_kwargs = {
-        "batch_size": cfg.TRAINER.BATCH_SIZE,
-        "num_workers": 0 if cfg.DEBUG else cfg.DATALOADER.NUM_WORKER,
-        "shuffle": cfg.DATALOADER.SHUFFLE,
-        "drop_last": True,
-        "pin_memory": True,
-    }
-    dataloader = torch_data.DataLoader(dataset, **dataloader_kwargs)
+    dataloader = torch_data.DataLoader(
+        dataset,
+        batch_size=cfg.TRAINER.BATCH_SIZE,
+        num_workers=0 if cfg.DEBUG else cfg.DATALOADER.NUM_WORKER,
+        shuffle=cfg.DATALOADER.SHUFFLE,
+        drop_last=True,
+        pin_memory=True,
+    )
 
     epochs = cfg.TRAINER.EPOCHS
     steps_per_epoch = len(dataloader)
@@ -48,11 +90,6 @@ def run_training(cfg: CfgNode):
 
     for epoch in range(1, epochs + 1):
         print(f"Starting epoch {epoch}/{epochs}.")
-        wandb.log({
-            "lr": scheduler.get_last_lr()[-1] if scheduler is not None else cfg.TRAINER.LEARNING_RATE,
-            "epoch": epoch
-        })
-
         start = timeit.default_timer()
 
         for batch in dataloader:
@@ -106,21 +143,15 @@ def run_training(cfg: CfgNode):
                 for measurer in measurers_list:
                     measurer.reset()
 
-        assert epoch == epoch_float
         print(f"epoch float {epoch_float} (step {global_step}) - epoch {epoch}")
 
         if scheduler is not None:
             scheduler.step()
 
-        val_loss = evaluation.model_evaluation(net, cfg, device, "val", epoch_float, global_step)
-        if val_loss > best_val_loss:
+        val_score = simple_val(net, cfg, device)
+        if val_score > best_val_loss:
             models.save_checkpoint(net, optimizer, epoch_float, cfg)
-            best_val_loss = val_loss
-            wandb.log({
-                "best_val_loss": best_val_loss,
-                "step": global_step,
-                "epoch": epoch_float,
-            })
+            best_val_loss = val_score
 
 
 if __name__ == "__main__":
@@ -132,6 +163,7 @@ if __name__ == "__main__":
     np.random.seed(cfg.SEED)
     if cfg.RANDOM_SEED:
         random.seed(cfg.SEED)
+
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 

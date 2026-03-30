@@ -1,63 +1,97 @@
-import timeit
+from typing import Sequence, Dict, Any, Union
+from pathlib import Path
+
+import cv2
+import numpy as np
 import torch
-from torch.utils import data as torch_data
 
-from utils import losses, measurers, metrics, models
-from utils.datasets_idabd import IdaBDDataset
+from utils import augmentations, helpers
+from utils.experiment_manager import CfgNode
 
 
-def model_evaluation(net, cfg, device, run_type, epoch_float, global_step):
-    dataset = IdaBDDataset(cfg, run_type=run_type, disable_augmentations=True)
+class IdaBDDataset(torch.utils.data.Dataset):
+    def __init__(self, cfg: CfgNode, run_type: str, disable_augmentations: bool = False):
+        super().__init__()
+        self.cfg = cfg
+        self.root_path = Path(cfg.PATHS.DATASET)
+        self.metadata = helpers.load_json(self.root_path / "metadata.json")
+        self.run_type = run_type
 
-    dataloader_kwargs = {
-        "batch_size": 1,
-        "num_workers": 0 if cfg.DEBUG else cfg.DATALOADER.NUM_WORKER,
-        "shuffle": False,
-        "drop_last": False,
-        "pin_memory": True,
-    }
-    dataloader = torch_data.DataLoader(dataset, **dataloader_kwargs)
+        augs = True if (run_type == "train" and not disable_augmentations) else False
+        self.transforms = augmentations.compose_transformations(cfg, augs_enabled=augs)
 
-    criterion = losses.ComboLoss(weights=cfg.TRAINER.LOSS.WEIGHTS)
-    class_weights = losses.loss_class_weights(cfg.TRAINER.LOSS.CLASS_WEIGHTS, dataset.get_class_counts())
+        self.samples = list(self.metadata[run_type]["patches"])
+        self.length = len(self.samples)
 
-    m_total, m_loc, m_dmg = measurers.AverageMeter(), measurers.AverageMeter(), measurers.AverageMeter()
-    m_dice = measurers.AverageMeter()
+    def load_images(self, subset: str, event: str, patch_id: str) -> Sequence[np.ndarray]:
+        img_pre_file = self.root_path / subset / "images" / f"{event}_{patch_id}_pre_disaster.png"
+        img_post_file = self.root_path / subset / "images" / f"{event}_{patch_id}_post_disaster.png"
 
-    start = timeit.default_timer()
+        img_pre = cv2.imread(str(img_pre_file), cv2.IMREAD_COLOR)
+        img_post = cv2.imread(str(img_post_file), cv2.IMREAD_COLOR)
 
-    net.eval()
-    with torch.no_grad():
-        for batch in dataloader:
-            x, msk = batch["img"].to(device), batch["msk"].to(device)
+        if img_pre is None:
+            raise FileNotFoundError(f"Could not read pre-image: {img_pre_file}")
+        if img_post is None:
+            raise FileNotFoundError(f"Could not read post-image: {img_post_file}")
 
-            if cfg.DATASET.INCLUDE_CONDITIONING_INFORMATION:
-                x_cond = batch["cond_id"].to(device)
-                logits = net(x, x_cond)
-            else:
-                logits = net(x)
+        return img_pre, img_post
 
-            loss_loc = criterion(logits[:, 0], msk[:, 0].long()) * class_weights[0]
+    def load_masks(self, subset: str, event: str, patch_id: str) -> Sequence[np.ndarray]:
+        msk_pre_file = self.root_path / subset / "masks" / f"{event}_{patch_id}_pre_disaster.png"
+        msk_post_file = self.root_path / subset / "masks" / f"{event}_{patch_id}_post_disaster.png"
 
-            loss_dmg = torch.tensor([0.0], device=device)
-            for c in range(1, logits.size(1)):
-                loss_dmg = loss_dmg + criterion(logits[:, c], msk[:, c].long()) * class_weights[c]
+        msk_pre = cv2.imread(str(msk_pre_file), cv2.IMREAD_UNCHANGED)
+        msk_post = cv2.imread(str(msk_post_file), cv2.IMREAD_UNCHANGED)
 
-            loss = loss_loc + loss_dmg
+        if msk_pre is None:
+            raise FileNotFoundError(f"Could not read pre-mask: {msk_pre_file}")
+        if msk_post is None:
+            raise FileNotFoundError(f"Could not read post-mask: {msk_post_file}")
 
-            y_hat = torch.sigmoid(logits[:, 0])
-            dice_sc = 1 - metrics.dice_round(y_hat, msk[:, 0])
+        msk_pre = msk_pre.astype(np.float32) / 255
+        return msk_pre, msk_post
 
-            m_loc.update(loss_loc.item(), x.size(0))
-            m_dmg.update(loss_dmg.item(), x.size(0))
-            m_total.update(loss.item(), x.size(0))
-            m_dice.update(dice_sc, x.size(0))
+    def __getitem__(self, index: int) -> Dict[str, Union[torch.Tensor, Any, str]]:
+        sample = self.samples[index]
+        event, patch_id, subset = sample["event"], sample["patch_id"], sample["subset"]
 
-    elapsed = timeit.default_timer() - start
-    print(
-        f"[{run_type}] loss={m_total.avg:.6f}, "
-        f"loc={m_loc.avg:.6f}, dmg={m_dmg.avg:.6f}, "
-        f"dice={m_dice.avg:.6f}, time={elapsed:.2f}s"
-    )
+        img_pre, img_post = self.load_images(subset, event, patch_id)
+        img = np.concatenate([img_pre, img_post], axis=2)
 
-    return -m_total.avg
+        msk_loc, msk_dmg = self.load_masks(subset, event, patch_id)
+        msk = np.stack((msk_loc, msk_dmg), axis=-1)
+
+        img, msk = self.transforms((img, msk))
+
+        img = torch.from_numpy(img.transpose((2, 0, 1))).float()
+        msk = torch.from_numpy(msk.transpose((2, 0, 1))).bool()
+
+        item = {
+            "img": img,
+            "msk": msk,
+            "event": event,
+            "patch_id": patch_id,
+            "subset": subset,
+        }
+
+        if self.cfg.DATASET.INCLUDE_CONDITIONING_INFORMATION:
+            cond_attr = self.cfg.DATASET.EVENT_CONDITIONING[event]
+            cond_id = int(self.cfg.DATASET.CONDITIONING_KEY[cond_attr])
+            item["cond_id"] = torch.tensor([cond_id]).long()
+
+        return item
+
+    def get_class_counts(self) -> Sequence[int]:
+        class_counts = [0, 0, 0, 0, 0]
+        for sample in self.samples:
+            class_counts[0] += sample["loc"]
+            for i in range(1, 5):
+                class_counts[i] += sample[f"cls_{i}"]
+        return class_counts
+
+    def __len__(self):
+        return self.length
+
+    def __str__(self):
+        return f"IdaBDDataset with {self.length} samples."

@@ -1,194 +1,105 @@
-from typing import Sequence, Dict, Any, Union
-
-import torch
-from abc import abstractmethod
-
-from utils import augmentations, helpers
-from utils.experiment_manager import CfgNode
+import json
+import random
+import shutil
+from pathlib import Path
 import cv2
 
-from pathlib import Path
+random.seed(42)
 
-from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader
+RAW_ROOT = Path(
+    "/homes/j244s673/documents/wsu/phd/idabd/PRJ-5770/"
+    "Project--ian-bd-pre-and-post-disaster-high-resolution-aerial-imagery-for-building-damage-assessment-from-hurricane-ian/data"
+)
 
-import numpy as np
+IMG_DIR = RAW_ROOT / "images"
+MSK_DIR = RAW_ROOT / "masks"
 
+OUT_ROOT = Path("/homes/j244s673/documents/wsu/phd/idabd_disasteradaptivenet")
 
-class AbstractxBDDataset(torch.utils.data.Dataset):
-    def __init__(self, cfg: CfgNode):
-        super().__init__()
-        self.cfg = cfg
-        self.root_path = Path(cfg.PATHS.DATASET)
-        self.metadata = helpers.load_json(self.root_path / 'metadata.json')
-
-        # for new dataset split
-        self.train_events = list(cfg.DATASET.TRAIN_EVENTS)
-        self.test_events = list(cfg.DATASET.TEST_EVENTS)
-        self.exclude_events = list(cfg.DATASET.EXCLUDE_EVENTS)
-
-        # split legacy/new
-        self.split = cfg.DATASET.SPLIT
-        if self.split == 'xview2':
-            self.samples_splits = self.get_samples_legacy()
-        elif self.split == 'event':
-            self.samples_splits = self.get_samples()
-        else:
-            raise NotImplementedError()
-
-    @abstractmethod
-    def __getitem__(self, index: int) -> dict:
-        pass
-
-    @abstractmethod
-    def __len__(self) -> int:
-        pass
-
-    def load_images(self, subset: str, event: str, patch_id: str) -> Sequence[np.ndarray]:
-        img_pre_file = self.root_path / subset / 'images' / f'{event}_{patch_id}_pre_disaster.png'
-        img_pre = cv2.imread(str(img_pre_file), cv2.IMREAD_COLOR)
-        img_post_file = self.root_path / subset / 'images' / f'{event}_{patch_id}_post_disaster.png'
-        img_post = cv2.imread(str(img_post_file).replace('_pre_', '_post_'), cv2.IMREAD_COLOR)
-        return img_pre, img_post
-
-    def load_masks(self, subset: str, event: str, patch_id: str) -> Sequence[np.ndarray]:
-        # 0: background, 1: building
-        msk_pre_file = self.root_path / subset / 'masks' / f'{event}_{patch_id}_pre_disaster.png'
-        msk_pre = cv2.imread(str(msk_pre_file), cv2.IMREAD_UNCHANGED)
-
-        # 0: background, 1: no damage, 2: minor damage, 3: major damage, 4: destroyed
-        msk_post_file = self.root_path / subset / 'masks' / f'{event}_{patch_id}_post_disaster.png'
-        msk_post = cv2.imread(str(msk_post_file), cv2.IMREAD_UNCHANGED)
-
-        if msk_pre is None:
-            raise FileNotFoundError(f"Could not read pre-mask: {msk_pre_file}")
-        if msk_post is None:
-            raise FileNotFoundError(f"Could not read post-mask: {msk_post_file}")
-
-        msk_pre = msk_pre.astype(np.float32) / 255
-        return msk_pre, msk_post
-
-    def get_samples_legacy(self) -> Dict:
-        """Get train/val split stratified by disaster name."""
-        subsets = ['train', 'tier3']
-        all_samples = []
-        for subset in subsets:
-            subset_samples = sorted(self.metadata[subset]['patches'], key=lambda s: f'{s["event"]}_{s["patch_id"]}')
-            all_samples.extend(subset_samples)
-
-        if self.cfg.DATASET.EXCLUDE_UNDAMAGED:
-            all_samples = [s for s in all_samples if (s['cls_2'] or s['cls_3'] or s['cls_4'])]
-
-        disaster_names = [s['event'] for s in all_samples]
-
-        # Fixed stratified sample to split data into train/val
-        train_indices, val_indices = train_test_split(np.arange(len(all_samples)), test_size=0.1,
-                                                      random_state=self.cfg.SEED, stratify=disaster_names)
-
-        if self.cfg.DATASET.OVERSAMPLE_BUILDINGS:
-            # Oversample images that contain buildings. But seems to oversample damage > minor damage?
-            # This should lead to roughly 50-50 distribution between images with and without buildings.
-            train_indices_new = list(train_indices)
-            for i in train_indices:
-                fl = np.zeros(4, dtype=bool)
-                for c in range(1, 5):
-                    fl[c - 1] = all_samples[i][f'cls_{c}'] > 0
-                if fl[1:].max():
-                    train_indices_new.append(i)
-            train_indices = train_indices_new
-
-        samples = {
-            'train': [all_samples[i] for i in train_indices],
-            'val': [all_samples[i] for i in val_indices],
-            'test': self.metadata['test']['patches'],
-        }
-        return samples
-
-    def get_samples(self) -> Dict:
-        """Get train/val split stratified by disaster name."""
-        subsets = ['train', 'tier3', 'test', 'hold']
-        all_samples = []
-        for subset in subsets:
-            all_samples.extend(self.metadata[subset]['patches'])
-
-        if self.cfg.DATASET.EXCLUDE_UNDAMAGED:
-            all_samples = [s for s in all_samples if (s['cls_2'] or s['cls_3'] or s['cls_4'])]
-
-        trainval_samples = [s for s in all_samples if s['event'] in self.train_events]
-        trainval_event_names = [s['event'] for s in trainval_samples]
-
-        # Fixed stratified sample to split data into train/val
-        train_indices, val_indices = train_test_split(np.arange(len(trainval_samples)), test_size=0.1,
-                                                      random_state=self.cfg.SEED, stratify=trainval_event_names)
-
-        if self.cfg.DATASET.OVERSAMPLE_BUILDINGS:
-            # Oversample images that contain buildings. But seems to oversample damage > minor damage?
-            # This should lead to roughly 50-50 distribution between images with and without buildings.
-            train_indices_new = list(train_indices)
-            for i in train_indices:
-                fl = np.zeros(4, dtype=bool)
-                for c in range(1, 5):
-                    fl[c - 1] = trainval_samples[i][f'cls_{c}'] > 0
-                if fl[1:].max():
-                    train_indices_new.append(i)
-            train_indices = train_indices_new
-
-        samples = {
-            'train': [trainval_samples[i] for i in train_indices],
-            'val': [trainval_samples[i] for i in val_indices],
-            'test': [s for s in all_samples if s['event'] in self.test_events],
-        }
-        return samples
+for split in ["train", "val", "test"]:
+    for sub in ["images", "masks", "targets"]:
+        (OUT_ROOT / split / sub).mkdir(parents=True, exist_ok=True)
 
 
-# dataset for urban extraction with building footprints
-class xBDDataset(AbstractxBDDataset):
+def collect_pairs():
+    pairs = []
+    for pre_path in sorted(IMG_DIR.glob("*_pre_disaster.png")):
+        stem = pre_path.stem.replace("_pre_disaster", "")
+        event, patch_id = stem.rsplit("_", 1)
 
-    def __init__(self, cfg, run_type: str, disable_augmentations: bool = False):
-        super().__init__(cfg)
-        self.run_type = run_type
-        augs = True if (run_type == 'train' and not disable_augmentations) else False
-        self.transforms = augmentations.compose_transformations(cfg, augs_enabled=augs)
-        self.n_dmg_classes = 4
+        post_img = IMG_DIR / f"{event}_{patch_id}_post_disaster.png"
+        pre_msk = MSK_DIR / f"{event}_{patch_id}_pre_disaster.png"
+        post_msk = MSK_DIR / f"{event}_{patch_id}_post_disaster.png"
 
-        self.samples = list(self.samples_splits[run_type])
-        self.length = len(self.samples)
+        if post_img.exists() and pre_msk.exists() and post_msk.exists():
+            pairs.append((event, patch_id))
+    return pairs
 
-    def __getitem__(self, index: int) -> Dict[str, Union[torch.Tensor, Any, str]]:
-        sample = self.samples[index]
-        event, patch_id, subset = sample['event'], sample['patch_id'], sample['subset']
 
-        # load images and masks
-        img_pre, img_post = self.load_images(subset, event, patch_id)
-        img = np.concatenate([img_pre, img_post], axis=2)
+def summarize_sample(event: str, patch_id: str, subset: str):
+    post_mask_path = OUT_ROOT / subset / "masks" / f"{event}_{patch_id}_post_disaster.png"
+    m = cv2.imread(str(post_mask_path), cv2.IMREAD_UNCHANGED)
+    if m is None:
+        raise FileNotFoundError(f"Could not read {post_mask_path}")
 
-        msk_loc, msk_dmg = self.load_masks(subset, event, patch_id)
-        msk = np.stack((msk_loc, msk_dmg), axis=-1)
-        img, msk = self.transforms((img, msk))
+    return {
+        "event": event,
+        "patch_id": patch_id,
+        "subset": subset,
+        "loc": int((m > 0).sum() > 0),
+        "cls_1": int((m == 1).sum() > 0),
+        "cls_2": int((m == 2).sum() > 0),
+        "cls_3": int((m == 3).sum() > 0),
+        "cls_4": int((m == 4).sum() > 0),
+    }
 
-        # Reshaping tensors from (H, W, C) to (C, H, W)
-        img = torch.from_numpy(img.transpose((2, 0, 1))).float()
-        msk = torch.from_numpy(msk.transpose((2, 0, 1))).bool()
 
-        item = {'img': img, 'msk': msk, 'event': event, 'patch_id': patch_id, 'subset': subset}
+pairs = collect_pairs()
+print(f"Found {len(pairs)} valid pre/post pairs.")
+random.shuffle(pairs)
 
-        if self.cfg.DATASET.INCLUDE_CONDITIONING_INFORMATION:
-            cond_attr = self.cfg.DATASET.EVENT_CONDITIONING[event]
-            cond_id = int(self.cfg.DATASET.CONDITIONING_KEY[cond_attr])
-            item['cond_id'] = torch.tensor([cond_id]).long()
+n = len(pairs)
+n_train = int(0.8 * n)
+n_val = int(0.1 * n)
 
-        return item
+split_map = {
+    "train": pairs[:n_train],
+    "val": pairs[n_train:n_train + n_val],
+    "test": pairs[n_train + n_val:],
+}
 
-    def get_class_counts(self) -> Sequence[int]:
-        class_counts = [0, 0, 0, 0, 0]
-        for sample in self.samples:
-            class_counts[0] += sample['loc']
-            for i in range(1, 5):
-                class_counts[i] += sample[f'cls_{i}']
-        return class_counts
+metadata = {}
 
-    def __len__(self):
-        return self.length
+for split, split_pairs in split_map.items():
+    patch_entries = []
 
-    def __str__(self):
-        return f'Dataset with {self.length} samples.'
+    for event, patch_id in split_pairs:
+        # copy paired images
+        for suffix in ["pre", "post"]:
+            img_name = f"{event}_{patch_id}_{suffix}_disaster.png"
+            shutil.copy2(IMG_DIR / img_name, OUT_ROOT / split / "images" / img_name)
+
+        # copy paired masks
+        for suffix in ["pre", "post"]:
+            msk_name = f"{event}_{patch_id}_{suffix}_disaster.png"
+            shutil.copy2(MSK_DIR / msk_name, OUT_ROOT / split / "masks" / msk_name)
+
+        # create targets from masks
+        shutil.copy2(
+            MSK_DIR / f"{event}_{patch_id}_pre_disaster.png",
+            OUT_ROOT / split / "targets" / f"{event}_{patch_id}_pre_disaster_target.png",
+        )
+        shutil.copy2(
+            MSK_DIR / f"{event}_{patch_id}_post_disaster.png",
+            OUT_ROOT / split / "targets" / f"{event}_{patch_id}_post_disaster_target.png",
+        )
+
+        patch_entries.append(summarize_sample(event, patch_id, split))
+
+    metadata[split] = {"patches": patch_entries}
+    print(f"{split}: {len(patch_entries)} samples")
+
+with open(OUT_ROOT / "metadata.json", "w") as f:
+    json.dump(metadata, f, indent=2)
+
+print(f"Prepared Ida-BD dataset at: {OUT_ROOT}")

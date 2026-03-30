@@ -22,7 +22,3 @@ DATASET:
     'storm': 3,
     'flood': 4,
   }
-
-INFERENCE:
-  USE_TRICKS: False
-  USE_ALL_FLIPS: True
