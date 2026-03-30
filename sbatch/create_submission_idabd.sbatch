@@ -17,7 +17,7 @@ cd /homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
 mkdir -p logs
 
 IDABD_ROOT=/homes/j244s673/documents/wsu/phd/idabd_disasteradaptivenet
-RUN_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/disasteradaptivenet_idabd_1067493
+RUN_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/disasteradaptivenet_idabd_1067497
 
 if [ -x "$HOME/miniforge3/bin/conda" ]; then
   CONDA_EXE="$HOME/miniforge3/bin/conda"
