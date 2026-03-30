@@ -16,9 +16,13 @@ MSK_DIR = RAW_ROOT / "masks"
 
 OUT_ROOT = Path("/homes/j244s673/documents/wsu/phd/idabd_real_disasteradaptivenet")
 
-for split in ["train", "val", "test"]:
-    for sub in ["images", "masks", "targets"]:
-        (OUT_ROOT / split / sub).mkdir(parents=True, exist_ok=True)
+
+def reset_output_root():
+    if OUT_ROOT.exists():
+        shutil.rmtree(OUT_ROOT)
+    for split in ["train", "val", "test"]:
+        for sub in ["images", "masks", "targets"]:
+            (OUT_ROOT / split / sub).mkdir(parents=True, exist_ok=True)
 
 
 def collect_pairs():
@@ -54,49 +58,74 @@ def summarize_sample(event: str, patch_id: str, subset: str):
     }
 
 
-pairs = collect_pairs()
-print(f"Found {len(pairs)} valid pre/post pairs.")
-random.shuffle(pairs)
+def main():
+    if not IMG_DIR.exists():
+        raise FileNotFoundError(f"Images directory not found: {IMG_DIR}")
+    if not MSK_DIR.exists():
+        raise FileNotFoundError(f"Masks directory not found: {MSK_DIR}")
 
-n = len(pairs)
-n_train = int(0.8 * n)
-n_val = int(0.1 * n)
+    reset_output_root()
 
-split_map = {
-    "train": pairs[:n_train],
-    "val": pairs[n_train:n_train + n_val],
-    "test": pairs[n_train + n_val:],
-}
+    pairs = collect_pairs()
+    print(f"Found {len(pairs)} valid pre/post pairs.")
 
-metadata = {}
+    random.shuffle(pairs)
 
-for split, split_pairs in split_map.items():
-    patch_entries = []
+    n = len(pairs)
+    n_train = int(0.8 * n)
+    n_val = int(0.1 * n)
 
-    for event, patch_id in split_pairs:
-        for suffix in ["pre", "post"]:
-            img_name = f"{event}_{patch_id}_{suffix}_disaster.png"
-            shutil.copy2(IMG_DIR / img_name, OUT_ROOT / split / "images" / img_name)
+    split_map = {
+        "train": pairs[:n_train],
+        "val": pairs[n_train:n_train + n_val],
+        "test": pairs[n_train + n_val:],
+    }
 
-        for suffix in ["pre", "post"]:
-            msk_name = f"{event}_{patch_id}_{suffix}_disaster.png"
-            shutil.copy2(MSK_DIR / msk_name, OUT_ROOT / split / "masks" / msk_name)
+    metadata = {}
 
-        shutil.copy2(
-            MSK_DIR / f"{event}_{patch_id}_pre_disaster.png",
-            OUT_ROOT / split / "targets" / f"{event}_{patch_id}_pre_disaster_target.png",
-        )
-        shutil.copy2(
-            MSK_DIR / f"{event}_{patch_id}_post_disaster.png",
-            OUT_ROOT / split / "targets" / f"{event}_{patch_id}_post_disaster_target.png",
-        )
+    for split, split_pairs in split_map.items():
+        # recreate to be extra safe
+        (OUT_ROOT / split / "images").mkdir(parents=True, exist_ok=True)
+        (OUT_ROOT / split / "masks").mkdir(parents=True, exist_ok=True)
+        (OUT_ROOT / split / "targets").mkdir(parents=True, exist_ok=True)
 
-        patch_entries.append(summarize_sample(event, patch_id, split))
+        patch_entries = []
 
-    metadata[split] = {"patches": patch_entries}
-    print(f"{split}: {len(patch_entries)} samples")
+        for event, patch_id in split_pairs:
+            # copy paired images
+            for suffix in ["pre", "post"]:
+                img_name = f"{event}_{patch_id}_{suffix}_disaster.png"
+                src_img = IMG_DIR / img_name
+                dst_img = OUT_ROOT / split / "images" / img_name
+                shutil.copy2(src_img, dst_img)
 
-with open(OUT_ROOT / "metadata.json", "w") as f:
-    json.dump(metadata, f, indent=2)
+            # copy paired masks
+            for suffix in ["pre", "post"]:
+                msk_name = f"{event}_{patch_id}_{suffix}_disaster.png"
+                src_msk = MSK_DIR / msk_name
+                dst_msk = OUT_ROOT / split / "masks" / msk_name
+                shutil.copy2(src_msk, dst_msk)
 
-print(f"Prepared Ida-BD dataset at: {OUT_ROOT}")
+            # create targets from masks
+            src_pre_t = MSK_DIR / f"{event}_{patch_id}_pre_disaster.png"
+            src_post_t = MSK_DIR / f"{event}_{patch_id}_post_disaster.png"
+
+            dst_pre_t = OUT_ROOT / split / "targets" / f"{event}_{patch_id}_pre_disaster_target.png"
+            dst_post_t = OUT_ROOT / split / "targets" / f"{event}_{patch_id}_post_disaster_target.png"
+
+            shutil.copy2(src_pre_t, dst_pre_t)
+            shutil.copy2(src_post_t, dst_post_t)
+
+            patch_entries.append(summarize_sample(event, patch_id, split))
+
+        metadata[split] = {"patches": patch_entries}
+        print(f"{split}: {len(patch_entries)} samples")
+
+    with open(OUT_ROOT / "metadata.json", "w") as f:
+        json.dump(metadata, f, indent=2)
+
+    print(f"Prepared Ida-BD dataset at: {OUT_ROOT}")
+
+
+if __name__ == "__main__":
+    main()
