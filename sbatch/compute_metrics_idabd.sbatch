@@ -16,11 +16,32 @@ cd /homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
 mkdir -p logs
 
 IDABD_ROOT=/homes/j244s673/documents/wsu/phd/idabd_disasteradaptivenet
-RUN_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/disasteradaptivenet_idabd_JOBID_REPLACE
+RUN_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/disasteradaptivenet_idabd_1067497
 mkdir -p "$RUN_DIR/scores"
 
-eval "$("$HOME/miniforge3/bin/conda" shell.bash hook)"
+if [ -x "$HOME/miniforge3/bin/conda" ]; then
+  CONDA_EXE="$HOME/miniforge3/bin/conda"
+elif [ -x "$HOME/miniforge/bin/conda" ]; then
+  CONDA_EXE="$HOME/miniforge/bin/conda"
+elif command -v conda >/dev/null 2>&1; then
+  CONDA_EXE="$(command -v conda)"
+else
+  echo "ERROR: conda not found."
+  exit 1
+fi
+
+eval "$("$CONDA_EXE" shell.bash hook)"
 conda activate disasteradaptivenet_cu128
+
+echo "===== JOB INFO ====="
+date
+hostname
+pwd
+which python
+python --version
+echo "IDABD_ROOT: $IDABD_ROOT"
+echo "RUN_DIR: $RUN_DIR"
+echo "===================="
 
 python -u compute_metrics_idabd.py \
   -c disasteradaptivenet_idabd \
