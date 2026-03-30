@@ -76,8 +76,9 @@ class IdaBDDataset(torch.utils.data.Dataset):
         }
 
         if self.cfg.DATASET.INCLUDE_CONDITIONING_INFORMATION:
-            cond_attr = self.cfg.DATASET.EVENT_CONDITIONING[event]
-            cond_id = int(self.cfg.DATASET.CONDITIONING_KEY[cond_attr])
+            cond_attr = str(self.cfg.DATASET.EVENT_CONDITIONING[event]).lower()
+            cond_key = {str(k).lower(): v for k, v in self.cfg.DATASET.CONDITIONING_KEY.items()}
+            cond_id = int(cond_key[cond_attr])
             item["cond_id"] = torch.tensor([cond_id]).long()
 
         return item
