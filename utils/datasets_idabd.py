@@ -50,6 +50,7 @@ class IdaBDDataset(torch.utils.data.Dataset):
         if msk_post is None:
             raise FileNotFoundError(f"Could not read post-mask: {msk_post_file}")
 
+        # pre mask becomes localization mask: 0 background, 1 building
         msk_pre = msk_pre.astype(np.float32) / 255
         return msk_pre, msk_post
 
@@ -57,14 +58,18 @@ class IdaBDDataset(torch.utils.data.Dataset):
         sample = self.samples[index]
         event, patch_id, subset = sample["event"], sample["patch_id"], sample["subset"]
 
+        # load pre/post images and stack as 6-channel input
         img_pre, img_post = self.load_images(subset, event, patch_id)
         img = np.concatenate([img_pre, img_post], axis=2)
 
+        # load localization and damage masks
         msk_loc, msk_dmg = self.load_masks(subset, event, patch_id)
         msk = np.stack((msk_loc, msk_dmg), axis=-1)
 
+        # apply augmentations / preprocessing
         img, msk = self.transforms((img, msk))
 
+        # convert from HWC to CHW
         img = torch.from_numpy(img.transpose((2, 0, 1))).float()
         msk = torch.from_numpy(msk.transpose((2, 0, 1))).bool()
 
@@ -77,8 +82,8 @@ class IdaBDDataset(torch.utils.data.Dataset):
         }
 
         if self.cfg.DATASET.INCLUDE_CONDITIONING_INFORMATION:
-            # Ida-BD is Hurricane Ian -> Storm
-            cond_attr = "Storm"
+            # Ida-BD is Hurricane Ian -> storm
+            cond_attr = "storm"
             cond_id = int(self.cfg.DATASET.CONDITIONING_KEY[cond_attr])
             item["cond_id"] = torch.tensor([cond_id]).long()
 
