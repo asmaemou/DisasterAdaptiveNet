@@ -35,53 +35,23 @@ def write_png(path: Path, arr: np.ndarray):
         raise RuntimeError(f"Failed to write image: {path}")
 
 
-def collect_tier1_pairs():
-    img_dir = SRC_ROOT / "tier1" / "images"
-    msk_dir = SRC_ROOT / "tier1" / "masks"
-
-    if not img_dir.exists() or not msk_dir.exists():
-        raise FileNotFoundError(f"tier1 images/masks not found under {SRC_ROOT}")
-
+def collect_tif_pairs(images_dir: Path, masks_dir: Path):
     pairs = []
-    for pre_path in sorted(img_dir.glob("*_pre_disaster.tif")):
+    for pre_path in sorted(images_dir.glob("*_pre_disaster.tif")):
         stem = pre_path.stem.replace("_pre_disaster", "")
         event, patch_id = stem.rsplit("_", 1)
 
-        post_img = img_dir / f"{event}_{patch_id}_post_disaster.tif"
-        post_msk = msk_dir / f"{event}_{patch_id}_post_disaster.tif"
+        post_img = images_dir / f"{event}_{patch_id}_post_disaster.tif"
+        post_msk = masks_dir / f"{event}_{patch_id}_post_disaster.tif"
 
         if post_img.exists() and post_msk.exists():
             pairs.append((event, patch_id))
-
     return pairs
 
 
-def collect_test_pairs():
-    png_dir = SRC_ROOT / "test" / "pngs"
-    if not png_dir.exists():
-        raise FileNotFoundError(f"test/pngs not found under {SRC_ROOT}")
-
-    pairs = []
-    for pre_path in sorted(png_dir.glob("*_pre_disaster.png")):
-        stem = pre_path.stem.replace("_pre_disaster", "")
-        event, patch_id = stem.rsplit("_", 1)
-
-        post_img = png_dir / f"{event}_{patch_id}_post_disaster.png"
-        pre_msk = png_dir / f"{event}_{patch_id}_pre_disaster.png.msk"
-        post_msk = png_dir / f"{event}_{patch_id}_post_disaster.png.msk"
-
-        if post_img.exists() and pre_msk.exists() and post_msk.exists():
-            pairs.append((event, patch_id))
-
-    return pairs
-
-
-def copy_sample_from_tif(dst_split: str, event: str, patch_id: str):
-    img_dir = SRC_ROOT / "tier1" / "images"
-    msk_dir = SRC_ROOT / "tier1" / "masks"
-
-    pre_img = cv2.imread(str(img_dir / f"{event}_{patch_id}_pre_disaster.tif"), cv2.IMREAD_COLOR)
-    post_img = cv2.imread(str(img_dir / f"{event}_{patch_id}_post_disaster.tif"), cv2.IMREAD_COLOR)
+def copy_sample_from_tif(images_dir: Path, masks_dir: Path, dst_split: str, event: str, patch_id: str):
+    pre_img = cv2.imread(str(images_dir / f"{event}_{patch_id}_pre_disaster.tif"), cv2.IMREAD_COLOR)
+    post_img = cv2.imread(str(images_dir / f"{event}_{patch_id}_post_disaster.tif"), cv2.IMREAD_COLOR)
 
     if pre_img is None:
         raise FileNotFoundError(f"Could not read pre-image tif for {event}_{patch_id}")
@@ -91,7 +61,7 @@ def copy_sample_from_tif(dst_split: str, event: str, patch_id: str):
     write_png(OUT_ROOT / dst_split / "images" / f"{event}_{patch_id}_pre_disaster.png", pre_img)
     write_png(OUT_ROOT / dst_split / "images" / f"{event}_{patch_id}_post_disaster.png", post_img)
 
-    post_mask = read_mask_any(msk_dir / f"{event}_{patch_id}_post_disaster.tif")
+    post_mask = read_mask_any(masks_dir / f"{event}_{patch_id}_post_disaster.tif")
     pre_mask = np.where(post_mask > 0, 255, 0).astype(np.uint8)
 
     write_png(OUT_ROOT / dst_split / "masks" / f"{event}_{patch_id}_pre_disaster.png", pre_mask)
@@ -99,35 +69,6 @@ def copy_sample_from_tif(dst_split: str, event: str, patch_id: str):
 
     write_png(OUT_ROOT / dst_split / "targets" / f"{event}_{patch_id}_pre_disaster_target.png", pre_mask)
     write_png(OUT_ROOT / dst_split / "targets" / f"{event}_{patch_id}_post_disaster_target.png", post_mask.astype(np.uint8))
-
-
-def copy_sample_from_pngs(dst_split: str, event: str, patch_id: str):
-    png_dir = SRC_ROOT / "test" / "pngs"
-
-    for suffix in ["pre", "post"]:
-        img_name = f"{event}_{patch_id}_{suffix}_disaster.png"
-        shutil.copy2(
-            png_dir / img_name,
-            OUT_ROOT / dst_split / "images" / img_name
-        )
-
-    pre_mask_src = png_dir / f"{event}_{patch_id}_pre_disaster.png.msk"
-    post_mask_src = png_dir / f"{event}_{patch_id}_post_disaster.png.msk"
-
-    pre_mask_dst = OUT_ROOT / dst_split / "masks" / f"{event}_{patch_id}_pre_disaster.png"
-    post_mask_dst = OUT_ROOT / dst_split / "masks" / f"{event}_{patch_id}_post_disaster.png"
-
-    shutil.copy2(pre_mask_src, pre_mask_dst)
-    shutil.copy2(post_mask_src, post_mask_dst)
-
-    shutil.copy2(
-        pre_mask_src,
-        OUT_ROOT / dst_split / "targets" / f"{event}_{patch_id}_pre_disaster_target.png"
-    )
-    shutil.copy2(
-        post_mask_src,
-        OUT_ROOT / dst_split / "targets" / f"{event}_{patch_id}_post_disaster_target.png"
-    )
 
 
 def summarize_sample(dst_split: str, event: str, patch_id: str):
@@ -147,7 +88,10 @@ def summarize_sample(dst_split: str, event: str, patch_id: str):
 
 
 def build_train_val():
-    pairs = collect_tier1_pairs()
+    images_dir = SRC_ROOT / "tier1" / "images"
+    masks_dir = SRC_ROOT / "tier1" / "masks"
+
+    pairs = collect_tif_pairs(images_dir, masks_dir)
     print(f"tier1: found {len(pairs)} valid pairs")
 
     random.shuffle(pairs)
@@ -161,11 +105,11 @@ def build_train_val():
     val_entries = []
 
     for event, patch_id in train_pairs:
-        copy_sample_from_tif("train", event, patch_id)
+        copy_sample_from_tif(images_dir, masks_dir, "train", event, patch_id)
         train_entries.append(summarize_sample("train", event, patch_id))
 
     for event, patch_id in val_pairs:
-        copy_sample_from_tif("val", event, patch_id)
+        copy_sample_from_tif(images_dir, masks_dir, "val", event, patch_id)
         val_entries.append(summarize_sample("val", event, patch_id))
 
     print(f"train: wrote {len(train_entries)} samples")
@@ -175,12 +119,15 @@ def build_train_val():
 
 
 def build_test():
-    pairs = collect_test_pairs()
+    images_dir = SRC_ROOT / "test" / "images"
+    masks_dir = SRC_ROOT / "test" / "masks"
+
+    pairs = collect_tif_pairs(images_dir, masks_dir)
     print(f"test: found {len(pairs)} valid pairs")
 
     test_entries = []
     for event, patch_id in pairs:
-        copy_sample_from_pngs("test", event, patch_id)
+        copy_sample_from_tif(images_dir, masks_dir, "test", event, patch_id)
         test_entries.append(summarize_sample("test", event, patch_id))
 
     print(f"test: wrote {len(test_entries)} samples")
