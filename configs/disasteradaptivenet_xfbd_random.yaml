@@ -1,0 +1,46 @@
+_BASE_: "base.yaml"
+
+MODEL:
+  TYPE: 'disasteradaptivenet'
+
+DATASET:
+  NAME: 'xFBDRandom'
+  SPLIT: 'xfbd'
+  OVERSAMPLE_BUILDINGS: False
+  INCLUDE_CONDITIONING_INFORMATION: True
+  EXCLUDE_UNDAMAGED: False
+  EXCLUDE_EVENTS: []
+  TRAIN_EVENTS: []
+  TEST_EVENTS: []
+  EVENT_CONDITIONING: {
+    'lower-puna-volcano': 'volcano',
+    'palu-tsunami': 'earthquake',
+    'mexico-earthquake': 'earthquake',
+    'socal-fire': 'wildfire',
+    'woolsey-fire': 'wildfire',
+    'portugal-wildfire': 'wildfire',
+    'pinery-bushfire': 'wildfire',
+    'nepal-flooding': 'flood',
+    'midwest-flooding': 'flood',
+    'moore-tornado': 'storm',
+    'joplin-tornado': 'storm',
+    'hurricane-florence': 'flood',
+    'hurricane-harvey': 'flood',
+    'hurricane-michael': 'storm',
+    'tuscaloosa-tornado': 'storm',
+    'guatemala-volcano': 'volcano',
+    'sunda-tsunami': 'earthquake',
+    'santa-rosa-wildfire': 'wildfire',
+    'hurricane-matthew': 'storm'
+  }
+  CONDITIONING_KEY: {
+    'wildfire': 0,
+    'volcano': 1,
+    'earthquake': 2,
+    'storm': 3,
+    'flood': 4
+  }
+
+INFERENCE:
+  USE_TRICKS: False
+  USE_ALL_FLIPS: True
