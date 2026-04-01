@@ -1,4 +1,7 @@
 #!/bin/bash
+#SBATCH -p wsu_soc_kshirsagar.q
+#SBATCH -N 1
+#SBATCH --ntasks=1
 #SBATCH --job-name=dan_rescuenet_xbd
 #SBATCH --output=logs/dan_rescuenet_xbd_%j.out
 #SBATCH --error=logs/dan_rescuenet_xbd_%j.err
