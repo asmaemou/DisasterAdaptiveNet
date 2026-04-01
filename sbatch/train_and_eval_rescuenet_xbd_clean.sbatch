@@ -17,7 +17,7 @@ cd /homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
 mkdir -p logs
 
 DATA_ROOT=/homes/j244s673/documents/wsu/phd/uda_two_stage/rescuenet_xbd
-RUN_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/rescuenet_xbd_disasteradaptivenet_cleanrerun
+RUN_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/rescuenet_xbd_disasteradaptivenet_cleanrerun_40ep
 
 if [ -x "$HOME/miniforge3/bin/conda" ]; then
   CONDA_EXE="$HOME/miniforge3/bin/conda"
@@ -53,7 +53,7 @@ echo "===== STEP 1: TRAIN CLEAN RERUN ====="
 python -u train_network_rescuenet_xbd_clean.py \
   --dataset-root "$DATA_ROOT" \
   --output-dir "$RUN_DIR" \
-  --epochs 20 \
+  --epochs 40 \
   --batch-size 8 \
   --num-workers 8 \
   --img-size 512 \
