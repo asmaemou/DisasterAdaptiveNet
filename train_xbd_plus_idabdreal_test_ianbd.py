@@ -220,7 +220,11 @@ class XBDOriginalDataset(BaseDamageDataset):
             raise RuntimeError(f"No xBD samples found under {self.split_root}")
 
     def _collect_samples(self) -> List[XBDSample]:
-        post_images = sorted(self.images_dir.glob("*_post_disaster.*"))
+        post_images = []
+        for ext in ["*.png", "*.jpg", "*.jpeg", "*.tif", "*.tiff", "*.bmp"]:
+            post_images.extend(self.images_dir.glob(f"*_post_disaster{ext[1:]}"))
+        post_images = sorted(post_images)
+
         samples: List[XBDSample] = []
 
         for post_path in post_images:
@@ -235,7 +239,9 @@ class XBDOriginalDataset(BaseDamageDataset):
             pre_tgt = self.targets_dir / f"{prefix}_pre_disaster_target.png"
             post_tgt = self.targets_dir / f"{prefix}_post_disaster_target.png"
 
-            if not pre_path.exists() or not pre_tgt.exists() or not post_tgt.exists():
+            if not pre_path.exists():
+                continue
+            if not pre_tgt.exists() or not post_tgt.exists():
                 continue
 
             samples.append(
@@ -247,6 +253,7 @@ class XBDOriginalDataset(BaseDamageDataset):
                     post_target_path=post_tgt,
                 )
             )
+
         return samples
 
     def __len__(self) -> int:
@@ -809,15 +816,15 @@ def main() -> None:
         args.xbd_root, args.xbd_val_split, args.img_size, False, args.conditioning_id
     )
 
-    ida_train = StandardSingleImageDamageDataset(
-        args.ida_real_root, args.ida_train_split, args.img_size, True, args.conditioning_id, "idabd_real"
+    ida_train = XBDOriginalDataset(
+    args.ida_real_root, args.ida_train_split, args.img_size, True, args.conditioning_id
     )
-    ida_val = StandardSingleImageDamageDataset(
-        args.ida_real_root, args.ida_val_split, args.img_size, False, args.conditioning_id, "idabd_real"
+    ida_val = XBDOriginalDataset(
+        args.ida_real_root, args.ida_val_split, args.img_size, False, args.conditioning_id
     )
 
-    target_test = StandardSingleImageDamageDataset(
-        args.target_root, args.target_test_split, args.img_size, False, args.conditioning_id, "ian_bd"
+    target_test = XBDOriginalDataset(
+        args.target_root, args.target_test_split, args.img_size, False, args.conditioning_id
     )
 
     train_loader = make_balanced_concat_loader([xbd_train, ida_train], args.batch_size, args.num_workers)
