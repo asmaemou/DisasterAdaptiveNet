@@ -121,6 +121,22 @@ class BaseDamageDataset(Dataset):
 
     @staticmethod
     def _build_damage_target_from_standard_mask(loc: np.ndarray, dmg: np.ndarray) -> np.ndarray:
+        """
+        Input convention:
+          0 background / non-building
+          1 no damage
+          2 minor damage
+          3 major damage
+          4 destroyed
+          255 optional ignore
+
+        Output convention for CE loss:
+          0 no damage
+          1 minor damage
+          2 major damage
+          3 destroyed
+          255 ignore
+        """
         loc_bin = loc > 0
         target = np.full(loc.shape, 255, dtype=np.uint8)
         target[(dmg == 1) & loc_bin] = 0
@@ -168,7 +184,7 @@ class XBDSample:
 
 class XBDOriginalDataset(BaseDamageDataset):
     """
-    Expected xBD-style paired layout:
+    Expected paired xBD-style layout:
       root/
         train|hold|val|test/
           images/
@@ -465,16 +481,16 @@ class BCEDiceLoss(nn.Module):
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser("Train on xBD + IDA-BD, test on RescueNet-xBD")
+    parser = argparse.ArgumentParser("Train on xBD + RescueNet-xBD, test on IAN-BD")
     parser.add_argument("--xbd-root", type=str, default="/homes/j244s673/documents/wsu/phd/xview2")
-    parser.add_argument("--ida-root", type=str, default="/homes/j244s673/documents/wsu/phd/idabd_real_disasteradaptivenet")
-    parser.add_argument("--target-root", type=str, default="/homes/j244s673/documents/wsu/phd/uda_two_stage/rescuenet_xbd")
+    parser.add_argument("--rescuenet-root", type=str, default="/homes/j244s673/documents/wsu/phd/uda_two_stage/rescuenet_xbd")
+    parser.add_argument("--target-root", type=str, default="/homes/j244s673/documents/wsu/phd/idabd_disasteradaptivenet")
     parser.add_argument("--xbd-train-split", type=str, default="train")
     parser.add_argument("--xbd-val-split", type=str, default="hold")
-    parser.add_argument("--ida-train-split", type=str, default="train")
-    parser.add_argument("--ida-val-split", type=str, default="val")
+    parser.add_argument("--rescuenet-train-split", type=str, default="train")
+    parser.add_argument("--rescuenet-val-split", type=str, default="val")
     parser.add_argument("--target-test-split", type=str, default="test")
-    parser.add_argument("--output-dir", type=str, default="output/xbd_plus_idabd_to_rescuenet")
+    parser.add_argument("--output-dir", type=str, default="output/xbd_plus_rescuenet_to_ianbd")
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--num-workers", type=int, default=8)
@@ -757,8 +773,8 @@ def write_target_test_outputs(results: Dict[str, object], output_dir: Path) -> N
     scores_dir = output_dir / "scores"
     scores_dir.mkdir(parents=True, exist_ok=True)
 
-    json_path = scores_dir / "scores_rescuenet_test.json"
-    txt_path = scores_dir / "scores_rescuenet_test.txt"
+    json_path = scores_dir / "scores_ianbd_test.json"
+    txt_path = scores_dir / "scores_ianbd_test.txt"
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
@@ -790,25 +806,25 @@ def main() -> None:
     print("Loading xBD val...", flush=True)
     xbd_val = XBDOriginalDataset(args.xbd_root, args.xbd_val_split, args.img_size, False, args.conditioning_id)
 
-    print("Loading IDA-BD train...", flush=True)
-    ida_train = XBDOriginalDataset(args.ida_root, args.ida_train_split, args.img_size, True, args.conditioning_id)
+    print("Loading RescueNet-xBD train...", flush=True)
+    rescuenet_train = RescueNetXBDDataset(args.rescuenet_root, args.rescuenet_train_split, args.img_size, True, args.conditioning_id)
 
-    print("Loading IDA-BD val...", flush=True)
-    ida_val = XBDOriginalDataset(args.ida_root, args.ida_val_split, args.img_size, False, args.conditioning_id)
+    print("Loading RescueNet-xBD val...", flush=True)
+    rescuenet_val = RescueNetXBDDataset(args.rescuenet_root, args.rescuenet_val_split, args.img_size, False, args.conditioning_id)
 
-    print("Loading RescueNet-xBD test...", flush=True)
-    target_test = RescueNetXBDDataset(args.target_root, args.target_test_split, args.img_size, False, args.conditioning_id)
+    print("Loading IAN-BD test...", flush=True)
+    target_test = XBDOriginalDataset(args.target_root, args.target_test_split, args.img_size, False, args.conditioning_id)
 
     print("Building dataloaders...", flush=True)
-    train_loader = make_balanced_concat_loader([xbd_train, ida_train], args.batch_size, args.num_workers)
-    val_loader = make_eval_loader(ConcatDataset([xbd_val, ida_val]), args.batch_size, args.num_workers)
+    train_loader = make_balanced_concat_loader([xbd_train, rescuenet_train], args.batch_size, args.num_workers)
+    val_loader = make_eval_loader(ConcatDataset([xbd_val, rescuenet_val]), args.batch_size, args.num_workers)
     target_test_loader = make_eval_loader(target_test, args.batch_size, args.num_workers)
 
-    loc_pos_weight, dmg_class_weights = aggregate_counts([xbd_train, ida_train])
+    loc_pos_weight, dmg_class_weights = aggregate_counts([xbd_train, rescuenet_train])
 
     print(f"xBD train samples: {len(xbd_train)} | xBD val samples: {len(xbd_val)}", flush=True)
-    print(f"IDA-BD train samples: {len(ida_train)} | IDA-BD val samples: {len(ida_val)}", flush=True)
-    print(f"RescueNet-xBD test samples: {len(target_test)}", flush=True)
+    print(f"RescueNet-xBD train samples: {len(rescuenet_train)} | RescueNet-xBD val samples: {len(rescuenet_val)}", flush=True)
+    print(f"IAN-BD test samples: {len(target_test)}", flush=True)
     print(f"Localization pos_weight: {loc_pos_weight.tolist()}", flush=True)
     print(f"Damage class weights: {dmg_class_weights.tolist()}", flush=True)
 
@@ -956,7 +972,7 @@ def main() -> None:
         with open(output_dir / "history.json", "w", encoding="utf-8") as f:
             json.dump(history, f, indent=2)
 
-    print("Evaluating best checkpoint on RescueNet-xBD test split...", flush=True)
+    print("Evaluating best checkpoint on IAN-BD test split...", flush=True)
     best_ckpt = torch.load(output_dir / "checkpoints" / "best.pt", map_location=device)
     model.load_state_dict(best_ckpt["model"])
 
