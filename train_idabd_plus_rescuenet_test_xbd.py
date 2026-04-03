@@ -198,7 +198,6 @@ class XBDOriginalDataset(BaseDamageDataset):
         post_images = sorted(post_images)
 
         samples: List[XBDSample] = []
-
         for post_path in post_images:
             if "_post_disaster" not in post_path.name:
                 continue
@@ -224,7 +223,6 @@ class XBDOriginalDataset(BaseDamageDataset):
                     post_target_path=post_tgt,
                 )
             )
-
         return samples
 
     def __len__(self) -> int:
@@ -311,7 +309,6 @@ class RescueNetXBDDataset(BaseDamageDataset):
                     dmg_path=dmg_path,
                 )
             )
-
         return samples
 
     def __len__(self) -> int:
@@ -446,16 +443,16 @@ class BCEDiceLoss(nn.Module):
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser("Train on IDA-BD + IAN-BD, test on RescueNet-xBD")
+    parser = argparse.ArgumentParser("Train on IDA-BD + RescueNet-xBD, test on xBD")
     parser.add_argument("--ida-root", type=str, default="/homes/j244s673/documents/wsu/phd/idabd_real_disasteradaptivenet")
-    parser.add_argument("--ian-root", type=str, default="/homes/j244s673/documents/wsu/phd/idabd_disasteradaptivenet")
-    parser.add_argument("--target-root", type=str, default="/homes/j244s673/documents/wsu/phd/uda_two_stage/rescuenet_xbd")
+    parser.add_argument("--rescuenet-root", type=str, default="/homes/j244s673/documents/wsu/phd/uda_two_stage/rescuenet_xbd")
+    parser.add_argument("--target-root", type=str, default="/homes/j244s673/documents/wsu/phd/xview2")
     parser.add_argument("--ida-train-split", type=str, default="train")
     parser.add_argument("--ida-val-split", type=str, default="val")
-    parser.add_argument("--ian-train-split", type=str, default="train")
-    parser.add_argument("--ian-val-split", type=str, default="val")
+    parser.add_argument("--rescuenet-train-split", type=str, default="train")
+    parser.add_argument("--rescuenet-val-split", type=str, default="val")
     parser.add_argument("--target-test-split", type=str, default="test")
-    parser.add_argument("--output-dir", type=str, default="output/idabd_plus_ianbd_to_rescuenet")
+    parser.add_argument("--output-dir", type=str, default="output/idabd_plus_rescuenet_to_xbd")
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--num-workers", type=int, default=8)
@@ -738,8 +735,8 @@ def write_target_test_outputs(results: Dict[str, object], output_dir: Path) -> N
     scores_dir = output_dir / "scores"
     scores_dir.mkdir(parents=True, exist_ok=True)
 
-    json_path = scores_dir / "scores_rescuenet_test.json"
-    txt_path = scores_dir / "scores_rescuenet_test.txt"
+    json_path = scores_dir / "scores_xbd_test.json"
+    txt_path = scores_dir / "scores_xbd_test.txt"
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
@@ -771,25 +768,25 @@ def main() -> None:
     print("Loading IDA-BD val...", flush=True)
     ida_val = XBDOriginalDataset(args.ida_root, args.ida_val_split, args.img_size, False, args.conditioning_id)
 
-    print("Loading IAN-BD train...", flush=True)
-    ian_train = XBDOriginalDataset(args.ian_root, args.ian_train_split, args.img_size, True, args.conditioning_id)
+    print("Loading RescueNet-xBD train...", flush=True)
+    rescuenet_train = RescueNetXBDDataset(args.rescuenet_root, args.rescuenet_train_split, args.img_size, True, args.conditioning_id)
 
-    print("Loading IAN-BD val...", flush=True)
-    ian_val = XBDOriginalDataset(args.ian_root, args.ian_val_split, args.img_size, False, args.conditioning_id)
+    print("Loading RescueNet-xBD val...", flush=True)
+    rescuenet_val = RescueNetXBDDataset(args.rescuenet_root, args.rescuenet_val_split, args.img_size, False, args.conditioning_id)
 
-    print("Loading RescueNet-xBD test...", flush=True)
-    target_test = RescueNetXBDDataset(args.target_root, args.target_test_split, args.img_size, False, args.conditioning_id)
+    print("Loading xBD test...", flush=True)
+    target_test = XBDOriginalDataset(args.target_root, args.target_test_split, args.img_size, False, args.conditioning_id)
 
     print("Building dataloaders...", flush=True)
-    train_loader = make_balanced_concat_loader([ida_train, ian_train], args.batch_size, args.num_workers)
-    val_loader = make_eval_loader(ConcatDataset([ida_val, ian_val]), args.batch_size, args.num_workers)
+    train_loader = make_balanced_concat_loader([ida_train, rescuenet_train], args.batch_size, args.num_workers)
+    val_loader = make_eval_loader(ConcatDataset([ida_val, rescuenet_val]), args.batch_size, args.num_workers)
     target_test_loader = make_eval_loader(target_test, args.batch_size, args.num_workers)
 
-    loc_pos_weight, dmg_class_weights = aggregate_counts([ida_train, ian_train])
+    loc_pos_weight, dmg_class_weights = aggregate_counts([ida_train, rescuenet_train])
 
     print(f"IDA-BD train samples: {len(ida_train)} | IDA-BD val samples: {len(ida_val)}", flush=True)
-    print(f"IAN-BD train samples: {len(ian_train)} | IAN-BD val samples: {len(ian_val)}", flush=True)
-    print(f"RescueNet-xBD test samples: {len(target_test)}", flush=True)
+    print(f"RescueNet-xBD train samples: {len(rescuenet_train)} | RescueNet-xBD val samples: {len(rescuenet_val)}", flush=True)
+    print(f"xBD test samples: {len(target_test)}", flush=True)
     print(f"Localization pos_weight: {loc_pos_weight.tolist()}", flush=True)
     print(f"Damage class weights: {dmg_class_weights.tolist()}", flush=True)
 
@@ -937,7 +934,7 @@ def main() -> None:
         with open(output_dir / "history.json", "w", encoding="utf-8") as f:
             json.dump(history, f, indent=2)
 
-    print("Evaluating best checkpoint on RescueNet-xBD test split...", flush=True)
+    print("Evaluating best checkpoint on xBD test split...", flush=True)
     best_ckpt = torch.load(output_dir / "checkpoints" / "best.pt", map_location=device)
     model.load_state_dict(best_ckpt["model"])
 
