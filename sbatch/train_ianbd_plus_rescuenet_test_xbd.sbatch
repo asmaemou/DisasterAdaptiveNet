@@ -9,6 +9,7 @@
 #SBATCH --job-name=ianbd_rescuenet_to_xbd
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
+#SBATCH --nodelist=compute202517
 
 set -euo pipefail
 export PYTHONUNBUFFERED=1
