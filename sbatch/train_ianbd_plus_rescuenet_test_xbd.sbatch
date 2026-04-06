@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
-#SBATCH --time=30:00:00
+#SBATCH --time=3:00:00
 #SBATCH --job-name=ianbd_rescuenet_to_xbd
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
