@@ -2,8 +2,8 @@
 #SBATCH -p wsu_soc_kshirsagar.q
 #SBATCH -N 1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64G
 #SBATCH --gres=gpu:1
 #SBATCH --time=30:00:00
 #SBATCH --job-name=xbd_idabd_ianbd_to_rescuenet
@@ -70,8 +70,8 @@ python -u train_xbd_plus_idabd_plus_ianbd_test_rescuenet.py \
   --target-test-split test \
   --output-dir "$RUN_DIR" \
   --epochs 40 \
-  --batch-size 8 \
-  --num-workers 8 \
+  --batch-size 32 \
+  --num-workers 12 \
   --img-size 512 \
   --amp
 
