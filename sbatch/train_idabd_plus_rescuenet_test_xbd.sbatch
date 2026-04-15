@@ -66,6 +66,8 @@ python -u train_idabd_plus_rescuenet_test_xbd.py \
   --batch-size 8 \
   --num-workers 8 \
   --img-size 512 \
+  --early-stopping-patience 10 \
+  --save-every 1 \
   --amp
 
 echo ""

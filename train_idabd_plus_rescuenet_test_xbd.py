@@ -468,6 +468,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--loc-bce-weight", type=float, default=1.0)
     parser.add_argument("--loc-dice-weight", type=float, default=1.0)
     parser.add_argument("--dmg-ce-weight", type=float, default=1.0)
+    parser.add_argument("--early-stopping-patience", type=int, default=10)
     return parser.parse_args()
 
 
@@ -807,6 +808,8 @@ def main() -> None:
     dmg_criterion = nn.CrossEntropyLoss(weight=dmg_class_weights, ignore_index=255).to(device)
 
     best_score = -1.0
+    best_epoch = 0
+    epochs_without_improvement = 0
     history = []
 
     for epoch in range(1, args.epochs + 1):
@@ -894,6 +897,47 @@ def main() -> None:
             flush=True,
         )
 
+        # save_checkpoint(
+        #     output_dir / "checkpoints" / "last.pt",
+        #     model,
+        #     optimizer,
+        #     scheduler,
+        #     scaler,
+        #     epoch,
+        #     best_score,
+        #     args,
+        # )
+
+        # if val_score > best_score:
+        #     best_score = val_score
+        #     save_checkpoint(
+        #         output_dir / "checkpoints" / "best.pt",
+        #         model,
+        #         optimizer,
+        #         scheduler,
+        #         scaler,
+        #         epoch,
+        #         best_score,
+        #         args,
+        #     )
+        #     print(f"Saved new best checkpoint with source-val score={best_score:.4f}", flush=True)
+
+        # if epoch % max(1, args.save_every) == 0:
+        #     save_checkpoint(
+        #         output_dir / "checkpoints" / f"epoch_{epoch:03d}.pt",
+        #         model,
+        #         optimizer,
+        #         scheduler,
+        #         scaler,
+        #         epoch,
+        #         best_score,
+        #         args,
+        #     )
+
+        # with open(output_dir / "history.json", "w", encoding="utf-8") as f:
+        #     json.dump(history, f, indent=2)
+
+
         save_checkpoint(
             output_dir / "checkpoints" / "last.pt",
             model,
@@ -905,8 +949,12 @@ def main() -> None:
             args,
         )
 
-        if val_score > best_score:
+        improved = val_score > best_score
+        if improved:
             best_score = val_score
+            best_epoch = epoch
+            epochs_without_improvement = 0
+
             save_checkpoint(
                 output_dir / "checkpoints" / "best.pt",
                 model,
@@ -917,7 +965,17 @@ def main() -> None:
                 best_score,
                 args,
             )
-            print(f"Saved new best checkpoint with source-val score={best_score:.4f}", flush=True)
+            print(
+                f"Saved new best checkpoint at epoch {epoch} with source-val score={best_score:.4f}",
+                flush=True,
+            )
+        else:
+            epochs_without_improvement += 1
+            print(
+                f"No improvement for {epochs_without_improvement} epoch(s). "
+                f"Best epoch so far: {best_epoch} | best_score={best_score:.4f}",
+                flush=True,
+            )
 
         if epoch % max(1, args.save_every) == 0:
             save_checkpoint(
@@ -931,8 +989,20 @@ def main() -> None:
                 args,
             )
 
+        row["best_score_so_far"] = best_score
+        row["best_epoch_so_far"] = best_epoch
+        row["epochs_without_improvement"] = epochs_without_improvement
+
         with open(output_dir / "history.json", "w", encoding="utf-8") as f:
             json.dump(history, f, indent=2)
+
+        if epochs_without_improvement >= args.early_stopping_patience:
+            print(
+                f"Early stopping triggered at epoch {epoch}. "
+                f"No validation improvement for {args.early_stopping_patience} consecutive epochs.",
+                flush=True,
+            )
+            break
 
     print("Evaluating best checkpoint on xBD test split...", flush=True)
     best_ckpt = torch.load(output_dir / "checkpoints" / "best.pt", map_location=device)
