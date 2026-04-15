@@ -62,7 +62,7 @@ python -u train_idabd_plus_ianbd_test_rescuenet.py \
   --ian-val-split val \
   --target-test-split test \
   --output-dir "$RUN_DIR" \
-  --epochs 40 \
+  --epochs 100 \
   --batch-size 8 \
   --num-workers 8 \
   --img-size 512 \
