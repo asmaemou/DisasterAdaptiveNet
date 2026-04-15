@@ -25,7 +25,7 @@ mkdir -p logs output/rescuenet_xbd_disasteradaptivenet
 python train_network_rescuenet_xbd.py \
   --dataset-root /homes/j244s673/documents/wsu/phd/uda_two_stage/rescuenet_xbd \
   --output-dir /homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/rescuenet_xbd_disasteradaptivenet \
-  --epochs 40 \
+  --epochs 100 \
   --batch-size 8 \
   --num-workers 8 \
   --img-size 512 \
