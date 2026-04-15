@@ -65,7 +65,7 @@ python -u train_xbd_plus_idabdreal_test_ianbd.py \
   --ida-val-split val \
   --target-test-split test \
   --output-dir "$RUN_DIR" \
-  --epochs 40 \
+  --epochs 100 \
   --batch-size 8 \
   --num-workers 8 \
   --img-size 512 \
