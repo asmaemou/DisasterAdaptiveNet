@@ -578,8 +578,10 @@ class BCEDiceLoss(nn.Module):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        "Multi-source unsupervised domain adaptation with mean teacher + prototype guidance"
+        "Unsupervised domain adaptation with mean teacher + prototype guidance"
+
     )
+    parser.add_argument("--source-dataset", type=str, required=True, choices=list(DATASET_NAMES))
     parser.add_argument("--target-dataset", type=str, required=True, choices=list(DATASET_NAMES))
 
     parser.add_argument("--xbd-root", type=str, default="/homes/j244s673/documents/wsu/phd/xview2")
