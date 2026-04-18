@@ -54,12 +54,12 @@ python -u train_dann_xbd_to_ida.py \
   --xbd-root "$XBD_ROOT" \
   --ida-root "$IDA_ROOT" \
   --output-dir "$RUN_DIR" \
-  --epochs 100 \
+  --epochs 60 \
   --batch-size 8 \
   --num-workers 8 \
   --img-size 512 \
   --save-every 1 \
-  --early-stopping-patience 10 \
+  --early-stopping-patience 5 \
   --amp
 
 echo ""
