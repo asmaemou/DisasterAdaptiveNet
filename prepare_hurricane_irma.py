@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import random
-import shutil
 from pathlib import Path
 
 import cv2
@@ -10,13 +9,12 @@ import cv2
 random.seed(42)
 
 RAW_ROOT = Path("/homes/j244s673/documents/wsu/phd/HURRICANE-IRMA")
-IMG_DIR = RAW_ROOT / "images" / "images"
-MSK_DIR = RAW_ROOT / "images" / "masks"
+IMG_DIR = RAW_ROOT / "images"
+MSK_DIR = RAW_ROOT / "masks"
 
 OUT_ROOT = Path("/homes/j244s673/documents/wsu/phd/irma_disasteradaptivenet")
 
 IMG_EXTS = [".png", ".jpg", ".jpeg", ".tif", ".tiff"]
-
 
 for split in ["train", "val", "test"]:
     for sub in ["images", "masks", "targets"]:

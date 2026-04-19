@@ -46,8 +46,8 @@ which python
 python --version
 echo "SCRIPT_PATH: $SCRIPT_PATH"
 echo "RAW_ROOT:    /homes/j244s673/documents/wsu/phd/HURRICANE-IRMA"
-echo "IMG_DIR:     /homes/j244s673/documents/wsu/phd/HURRICANE-IRMA/images/images"
-echo "MSK_DIR:     /homes/j244s673/documents/wsu/phd/HURRICANE-IRMA/images/masks"
+echo "IMG_DIR:     /homes/j244s673/documents/wsu/phd/HURRICANE-IRMA/images"
+echo "MSK_DIR:     /homes/j244s673/documents/wsu/phd/HURRICANE-IRMA/masks"
 echo "OUT_ROOT:    /homes/j244s673/documents/wsu/phd/irma_disasteradaptivenet"
 echo "===================="
 
@@ -67,3 +67,10 @@ echo "Val images count:"
 find /homes/j244s673/documents/wsu/phd/irma_disasteradaptivenet/val/images -type f | wc -l
 echo "Test images count:"
 find /homes/j244s673/documents/wsu/phd/irma_disasteradaptivenet/test/images -type f | wc -l
+echo ""
+echo "Train masks count:"
+find /homes/j244s673/documents/wsu/phd/irma_disasteradaptivenet/train/masks -type f | wc -l
+echo "Val masks count:"
+find /homes/j244s673/documents/wsu/phd/irma_disasteradaptivenet/val/masks -type f | wc -l
+echo "Test masks count:"
+find /homes/j244s673/documents/wsu/phd/irma_disasteradaptivenet/test/masks -type f | wc -l
