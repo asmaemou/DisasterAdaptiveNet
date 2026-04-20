@@ -119,7 +119,7 @@ run_one_pair () {
     STATUS="failed"
   fi
 
-  echo ""
+  echo "" 
   echo "END: $(date)" | tee -a "$PAIR_LOG"
   echo "STATUS: $STATUS" | tee -a "$PAIR_LOG"
   echo "EXIT_CODE: $EXIT_CODE" | tee -a "$PAIR_LOG"
