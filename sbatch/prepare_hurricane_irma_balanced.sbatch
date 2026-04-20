@@ -15,7 +15,8 @@ export PYTHONUNBUFFERED=1
 cd /homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
 mkdir -p logs
 
-SCRIPT_PATH=/homes/j244s673/documents/wsu/phd/prepare_hurricane_irma_balanced.py
+SCRIPT_PATH=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/prepare_hurricane_irma_balanced.py
+
 
 if [ ! -f "$SCRIPT_PATH" ]; then
   echo "ERROR: script not found at $SCRIPT_PATH"
