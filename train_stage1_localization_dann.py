@@ -7,7 +7,7 @@ import random
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -53,6 +53,7 @@ def resize_rgb_and_mask(image: np.ndarray, mask: Optional[np.ndarray], image_siz
 
 
 def apply_shared_aug(image: np.ndarray, mask: Optional[np.ndarray], training: bool):
+    # user requested no augmentation
     return image, mask
 
 
@@ -61,8 +62,10 @@ class BaseLocalizationDataset(Dataset):
         self.image_size = int(image_size)
         self.training = bool(training)
         self.source_name = source_name
-        self._mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)[:, None, None]
-        self._std = np.array([0.229, 0.224, 0.225], dtype=np.float32)[:, None, None]
+        # DisasterAdaptiveNet expects 6 channels (two RGB images).
+        # For stage-1 localization we use pre-disaster only, so we feed [pre, pre].
+        self._mean = np.array([0.485, 0.456, 0.406] * 2, dtype=np.float32)[:, None, None]
+        self._std = np.array([0.229, 0.224, 0.225] * 2, dtype=np.float32)[:, None, None]
 
     @staticmethod
     def _read_rgb(path: Path) -> np.ndarray:
@@ -80,18 +83,19 @@ class BaseLocalizationDataset(Dataset):
             mask = mask[..., 0]
         return mask
 
-    def _normalize(self, image: np.ndarray) -> np.ndarray:
-        image = image.astype(np.float32) / 255.0
-        image = image.transpose(2, 0, 1)
-        image = (image - self._mean) / self._std
-        return image
+    def _normalize_as_paired_pre(self, image: np.ndarray) -> np.ndarray:
+        pre = image.astype(np.float32) / 255.0
+        x = np.concatenate([pre, pre], axis=2)  # H,W,6  -> [pre, pre]
+        x = x.transpose(2, 0, 1)
+        x = (x - self._mean) / self._std
+        return x
 
     def _finalize_labeled(self, image: np.ndarray, loc: np.ndarray, stem: str):
         image, loc = resize_rgb_and_mask(image, loc, self.image_size)
         image, loc = apply_shared_aug(image, loc, self.training)
         loc = (loc > 0).astype(np.float32)
         return {
-            "img": torch.from_numpy(self._normalize(image)).float(),
+            "img": torch.from_numpy(self._normalize_as_paired_pre(image)).float(),
             "loc": torch.from_numpy(loc).float(),
             "stem": stem,
             "source_name": self.source_name,
@@ -101,7 +105,7 @@ class BaseLocalizationDataset(Dataset):
         image, _ = resize_rgb_and_mask(image, None, self.image_size)
         image, _ = apply_shared_aug(image, None, self.training)
         return {
-            "img": torch.from_numpy(self._normalize(image)).float(),
+            "img": torch.from_numpy(self._normalize_as_paired_pre(image)).float(),
             "stem": stem,
             "source_name": self.source_name,
         }
@@ -282,7 +286,7 @@ class LocalizationDomainDiscriminator(nn.Module):
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser("Stage 1 localization with domain adaptation")
+    parser = argparse.ArgumentParser("Stage 1 localization with DANN-style domain adaptation")
     parser.add_argument("--source-dataset", type=str, required=True, choices=["xbd", "ida", "ian", "irma"])
     parser.add_argument("--target-dataset", type=str, required=True, choices=["xbd", "ida", "ian", "irma"])
     parser.add_argument("--xbd-root", type=str, default="/homes/j244s673/documents/wsu/phd/xview2")
@@ -352,7 +356,7 @@ def evaluate_localization(model: nn.Module, loader: DataLoader, criterion: BCEDi
     for batch in iterator:
         img = batch["img"].to(device, non_blocking=True)
         loc = batch["loc"].to(device, non_blocking=True)
-        cond = torch.zeros((img.size(0), 1), dtype=torch.long, device=device)
+        cond = torch.full((img.size(0), 1), args.conditioning_id, dtype=torch.long, device=device)
         logits = model(img, cond)[:, 0]
         bce, dice_loss = criterion(logits, loc)
         loss = args.loc_bce_weight * bce + args.loc_dice_weight * dice_loss
@@ -410,6 +414,7 @@ def main() -> None:
     tgt_root, tgt_train_split, tgt_val_split, tgt_test_split = dataset_root_and_splits(args.target_dataset, args)
     print(f"Source: {args.source_dataset} | root={src_root}", flush=True)
     print(f"Target: {args.target_dataset} | root={tgt_root}", flush=True)
+    print("Stage-1 uses [pre, pre] as a 6-channel paired input for DisasterAdaptiveNet.", flush=True)
 
     src_train = XBDStyleLocalizationLabeledDataset(src_root, src_train_split, args.img_size, True, args.source_dataset)
     src_val = XBDStyleLocalizationLabeledDataset(src_root, src_val_split, args.img_size, False, args.source_dataset)
@@ -443,6 +448,7 @@ def main() -> None:
         while True:
             for batch in loader:
                 yield batch
+
     tgt_iter = cycle(tgt_u_loader)
     steps_per_epoch = len(src_train_loader)
 
@@ -465,7 +471,12 @@ def main() -> None:
             grl_lambda = compute_grl_lambda(epoch, step, steps_per_epoch, args.epochs)
             optimizer.zero_grad(set_to_none=True)
 
-            with autocast(device_type=device.type, enabled=USE_TORCH_AMP and args.amp and device.type == "cuda") if USE_TORCH_AMP else autocast(enabled=args.amp and device.type == "cuda"):
+            if USE_TORCH_AMP:
+                ctx = autocast(device_type=device.type, enabled=args.amp and device.type == "cuda")
+            else:
+                ctx = autocast(enabled=args.amp and device.type == "cuda")
+
+            with ctx:
                 src_logits = model(src_img, src_cond)[:, 0]
                 tgt_logits = model(tgt_img, tgt_cond)[:, 0]
                 loc_bce, loc_dice = criterion(src_logits, src_loc)
@@ -474,7 +485,10 @@ def main() -> None:
                 tgt_dom_logits = domain_disc(tgt_logits.unsqueeze(1), grl_lambda)
                 src_dom_targets = torch.zeros_like(src_dom_logits)
                 tgt_dom_targets = torch.ones_like(tgt_dom_logits)
-                dom_loss = 0.5 * (domain_criterion(src_dom_logits, src_dom_targets) + domain_criterion(tgt_dom_logits, tgt_dom_targets))
+                dom_loss = 0.5 * (
+                    domain_criterion(src_dom_logits, src_dom_targets)
+                    + domain_criterion(tgt_dom_logits, tgt_dom_targets)
+                )
                 total_loss = sup_loss + args.domain_weight * dom_loss
 
             scaler.scale(total_loss).backward()
@@ -512,8 +526,10 @@ def main() -> None:
             best_epoch = epoch
             epochs_without_improvement = 0
             save_checkpoint(output_dir / "checkpoints" / "best.pt", model, domain_disc, optimizer, scheduler, scaler, epoch, best_score, best_epoch, args)
+            print(f"Saved new best checkpoint at epoch {epoch} with source-val score={best_score:.4f}", flush=True)
         else:
             epochs_without_improvement += 1
+            print(f"No improvement for {epochs_without_improvement} epoch(s). Best epoch so far: {best_epoch} | best_score={best_score:.4f}", flush=True)
 
         save_checkpoint(output_dir / "checkpoints" / "last.pt", model, domain_disc, optimizer, scheduler, scaler, epoch, best_score, best_epoch, args)
         if epoch % max(1, args.save_every) == 0:
@@ -521,6 +537,10 @@ def main() -> None:
         with open(output_dir / "history.json", "w", encoding="utf-8") as f:
             json.dump(history, f, indent=2)
         if epochs_without_improvement >= args.early_stopping_patience:
+            print(
+                f"Early stopping triggered at epoch {epoch}. No validation improvement for {args.early_stopping_patience} consecutive epochs.",
+                flush=True,
+            )
             break
 
     ckpt = torch.load(output_dir / "checkpoints" / "best.pt", map_location=device)
