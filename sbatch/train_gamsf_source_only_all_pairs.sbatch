@@ -103,7 +103,8 @@ run_one_pair () {
     --ian-root "$IAN_ROOT" \
     --irma-root "$IRMA_ROOT" \
     --output-dir "$RUN_DIR" \
-    --epochs 100 \
+    --stage1-epochs 60 \
+    --stage2-epochs 120 \
     --batch-size 8 \
     --num-workers 8 \
     --img-size 512 \
