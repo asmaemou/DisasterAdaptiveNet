@@ -14,7 +14,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import ConcatDataset, DataLoader, Dataset
 
 cv2.setNumThreads(0)
 cv2.ocl.setUseOpenCL(False)
@@ -53,7 +53,7 @@ class PairedSample:
     post_target_path: Path
 
 
-class XBDStyleDataset(Dataset):
+class BaseXBDStyleDataset(Dataset):
     def __init__(self, root: str | Path, split: str, image_size: int, training: bool):
         self.root = Path(root)
         self.split_root = self.root / split
@@ -66,9 +66,6 @@ class XBDStyleDataset(Dataset):
 
         if not self.images_dir.exists():
             raise FileNotFoundError(f"Expected images dir not found: {self.images_dir}")
-        if not self.targets_dir.exists():
-            raise FileNotFoundError(f"Expected targets dir not found: {self.targets_dir}")
-
         self.samples = self._collect_samples()
         if not self.samples:
             raise RuntimeError(f"No paired samples found under {self.split_root}")
@@ -88,9 +85,6 @@ class XBDStyleDataset(Dataset):
             if pre_path.exists() and pre_tgt.exists() and post_tgt.exists():
                 samples.append(PairedSample(prefix, pre_path, post_path, pre_tgt, post_tgt))
         return samples
-
-    def __len__(self) -> int:
-        return len(self.samples)
 
     @staticmethod
     def _read_rgb(path: Path) -> np.ndarray:
@@ -118,16 +112,32 @@ class XBDStyleDataset(Dataset):
         target[(dmg == 4) & loc_bin] = 3
         return target
 
-    def _resize(self, pre: np.ndarray, post: np.ndarray, loc: np.ndarray, dmg_target: np.ndarray):
+    def _resize(self, pre: np.ndarray, post: np.ndarray, loc: Optional[np.ndarray], dmg_target: Optional[np.ndarray]):
         if pre.shape[:2] != (self.image_size, self.image_size):
             pre = cv2.resize(pre, (self.image_size, self.image_size), interpolation=cv2.INTER_LINEAR)
         if post.shape[:2] != (self.image_size, self.image_size):
             post = cv2.resize(post, (self.image_size, self.image_size), interpolation=cv2.INTER_LINEAR)
-        if loc.shape[:2] != (self.image_size, self.image_size):
+        if loc is not None and loc.shape[:2] != (self.image_size, self.image_size):
             loc = cv2.resize(loc, (self.image_size, self.image_size), interpolation=cv2.INTER_NEAREST)
-        if dmg_target.shape[:2] != (self.image_size, self.image_size):
+        if dmg_target is not None and dmg_target.shape[:2] != (self.image_size, self.image_size):
             dmg_target = cv2.resize(dmg_target, (self.image_size, self.image_size), interpolation=cv2.INTER_NEAREST)
         return pre, post, loc, dmg_target
+
+    def _norm_rgb(self, img: np.ndarray) -> np.ndarray:
+        x = img.astype(np.float32) / 255.0
+        x = x.transpose(2, 0, 1)
+        x = (x - self._mean) / self._std
+        return x
+
+
+class XBDStyleLabeledDataset(BaseXBDStyleDataset):
+    def __init__(self, root: str | Path, split: str, image_size: int, training: bool):
+        super().__init__(root, split, image_size, training)
+        if not self.targets_dir.exists():
+            raise FileNotFoundError(f"Expected targets dir not found: {self.targets_dir}")
+
+    def __len__(self) -> int:
+        return len(self.samples)
 
     def __getitem__(self, index: int):
         s = self.samples[index]
@@ -138,17 +148,9 @@ class XBDStyleDataset(Dataset):
         loc_bin = (loc > 0).astype(np.float32)
         dmg_target = self._build_damage_target(loc, dmg)
         pre, post, loc_bin, dmg_target = self._resize(pre, post, loc_bin, dmg_target)
-
-        pre_t = pre.astype(np.float32) / 255.0
-        post_t = post.astype(np.float32) / 255.0
-        pre_t = pre_t.transpose(2, 0, 1)
-        post_t = post_t.transpose(2, 0, 1)
-        pre_t = (pre_t - self._mean) / self._std
-        post_t = (post_t - self._mean) / self._std
-
         return {
-            "pre": torch.from_numpy(pre_t).float(),
-            "post": torch.from_numpy(post_t).float(),
+            "pre": torch.from_numpy(self._norm_rgb(pre)).float(),
+            "post": torch.from_numpy(self._norm_rgb(post)).float(),
             "loc": torch.from_numpy(loc_bin).float(),
             "dmg": torch.from_numpy(dmg_target).long(),
             "stem": s.stem,
@@ -174,6 +176,22 @@ class XBDStyleDataset(Dataset):
                 for v, f in zip(vals.tolist(), freqs.tolist()):
                     counts[int(v)] += int(f)
         return counts
+
+
+class XBDStyleUnlabeledDataset(BaseXBDStyleDataset):
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, index: int):
+        s = self.samples[index]
+        pre = self._read_rgb(s.pre_image_path)
+        post = self._read_rgb(s.post_image_path)
+        pre, post, _, _ = self._resize(pre, post, None, None)
+        return {
+            "pre": torch.from_numpy(self._norm_rgb(pre)).float(),
+            "post": torch.from_numpy(self._norm_rgb(post)).float(),
+            "stem": s.stem,
+        }
 
 
 class AverageMeter:
@@ -302,7 +320,6 @@ class MulticlassFocalDiceLoss(nn.Module):
         num_classes = logits.size(1)
         dice_terms = []
         for cls in range(num_classes):
-            cls_valid = valid & (target == cls)
             target_mask = (target == cls).float() * valid.float()
             pred_mask = probs[:, cls] * valid.float()
             inter = (pred_mask * target_mask).sum(dim=(1, 2))
@@ -336,14 +353,13 @@ class HaarWaveletDecompose(nn.Module):
         lh = torch.tensor([[-0.5, -0.5], [0.5, 0.5]], dtype=torch.float32)
         hl = torch.tensor([[-0.5, 0.5], [-0.5, 0.5]], dtype=torch.float32)
         hh = torch.tensor([[0.5, -0.5], [-0.5, 0.5]], dtype=torch.float32)
-        kernel = torch.stack([ll, lh, hl, hh], dim=0).unsqueeze(1)  # [4,1,2,2]
-        kernel = kernel.repeat(channels, 1, 1, 1)  # [4C,1,2,2]
+        kernel = torch.stack([ll, lh, hl, hh], dim=0).unsqueeze(1)
+        kernel = kernel.repeat(channels, 1, 1, 1)
         self.register_buffer("kernel", kernel)
         self.channels = channels
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out = F.conv2d(x, self.kernel, stride=2, padding=0, groups=self.channels)
-        return out
+        return F.conv2d(x, self.kernel, stride=2, padding=0, groups=self.channels)
 
 
 class MWFStem(nn.Module):
@@ -368,14 +384,12 @@ class MWFStem(nn.Module):
         ih = self.wave(self.wavelet(x))
         if ih.shape[-2:] != fx.shape[-2:]:
             ih = F.interpolate(ih, size=fx.shape[-2:], mode="bilinear", align_corners=False)
-        fy = self.fuse(torch.cat([fx, ih], dim=1))
-        return fy
+        return self.fuse(torch.cat([fx, ih], dim=1))
 
 
 class AdaptiveAttention(nn.Module):
-    def __init__(self, channels: int, pool_size: int = 32):
+    def __init__(self, channels: int):
         super().__init__()
-        self.pool_size = int(pool_size)
         self.local = nn.Sequential(
             nn.Conv2d(channels, channels, kernel_size=3, padding=1, groups=channels, bias=False),
             nn.BatchNorm2d(channels),
@@ -395,21 +409,13 @@ class AdaptiveAttention(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, c, h, w = x.shape
         local = self.local(x)
-
-        pooled_h = min(h, self.pool_size)
-        pooled_w = min(w, self.pool_size)
-        pooled = local if (pooled_h == h and pooled_w == w) else F.adaptive_avg_pool2d(local, (pooled_h, pooled_w))
-
-        q, k, v = self.qkv(pooled).chunk(3, dim=1)
+        q, k, v = self.qkv(local).chunk(3, dim=1)
         q = q.flatten(2).transpose(1, 2)
         k = k.flatten(2)
         v = v.flatten(2).transpose(1, 2)
         attn = torch.matmul(q, k) / math.sqrt(max(1, c))
         attn = attn.softmax(dim=-1)
-        global_feat = torch.matmul(attn, v).transpose(1, 2).reshape(b, c, pooled_h, pooled_w)
-        if global_feat.shape[-2:] != (h, w):
-            global_feat = F.interpolate(global_feat, size=(h, w), mode="bilinear", align_corners=False)
-
+        global_feat = torch.matmul(attn, v).transpose(1, 2).reshape(b, c, h, w)
         stripe_h = x.mean(dim=3, keepdim=True)
         stripe_w = x.mean(dim=2, keepdim=True)
         stripe = stripe_h.expand(-1, -1, -1, w) + stripe_w.expand(-1, -1, h, -1)
@@ -469,7 +475,7 @@ class GAMSFBlock(nn.Module):
 
 
 class GAMSFEncoder(nn.Module):
-    def __init__(self, in_ch: int = 3, aa_layout: Tuple[int, int, int] = (4, 4, 2), channels: Tuple[int, int, int, int] = (32, 64, 96, 128), attn_pool_size: int = 32):
+    def __init__(self, in_ch: int = 3, aa_layout: Tuple[int, int, int] = (4, 4, 2), channels: Tuple[int, int, int, int] = (32, 64, 96, 128)):
         super().__init__()
         c1, c2, c3, c4 = channels
         s2, s3, s4 = aa_layout
@@ -500,29 +506,31 @@ class DecoderBlock(nn.Module):
 
 
 class GAMSFStage1(nn.Module):
-    def __init__(self, aa_layout: Tuple[int, int, int] = (4, 4, 2), channels: Tuple[int, int, int, int] = (32, 64, 96, 128), attn_pool_size: int = 32):
+    def __init__(self, aa_layout: Tuple[int, int, int] = (4, 4, 2), channels: Tuple[int, int, int, int] = (32, 64, 96, 128)):
         super().__init__()
         c1, c2, c3, c4 = channels
-        self.encoder = GAMSFEncoder(3, aa_layout, channels, attn_pool_size)
+        self.encoder = GAMSFEncoder(3, aa_layout, channels)
         self.dec3 = DecoderBlock(c4, c3, c3)
         self.dec2 = DecoderBlock(c3, c2, c2)
         self.dec1 = DecoderBlock(c2, c1, c1)
         self.head = nn.Conv2d(c1, 1, kernel_size=1)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, return_feat: bool = False):
         s1, s2, s3, s4 = self.encoder(x)
         x = self.dec3(s4, s3)
         x = self.dec2(x, s2)
         x = self.dec1(x, s1)
-        x = self.head(x)
-        return x
+        logits = self.head(x)
+        if return_feat:
+            return logits, s4
+        return logits
 
 
 class GAMSFStage2(nn.Module):
-    def __init__(self, aa_layout: Tuple[int, int, int] = (4, 4, 2), channels: Tuple[int, int, int, int] = (32, 64, 96, 128), attn_pool_size: int = 32):
+    def __init__(self, aa_layout: Tuple[int, int, int] = (4, 4, 2), channels: Tuple[int, int, int, int] = (32, 64, 96, 128)):
         super().__init__()
         c1, c2, c3, c4 = channels
-        self.encoder = GAMSFEncoder(3, aa_layout, channels, attn_pool_size)
+        self.encoder = GAMSFEncoder(3, aa_layout, channels)
         self.fuse4 = ConvBNAct(c4 * 2, c4, 1, 1, 0)
         self.fuse3 = ConvBNAct(c3 * 2, c3, 1, 1, 0)
         self.fuse2 = ConvBNAct(c2 * 2, c2, 1, 1, 0)
@@ -543,7 +551,7 @@ class GAMSFStage2(nn.Module):
         m = F.interpolate(mask.unsqueeze(1), size=feat.shape[-2:], mode="nearest")
         return proj(torch.cat([feat, m], dim=1))
 
-    def forward(self, pre: torch.Tensor, post: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+    def forward(self, pre: torch.Tensor, post: torch.Tensor, mask: torch.Tensor, return_feat: bool = False):
         p1, p2, p3, p4 = self.encoder(pre)
         q1, q2, q3, q4 = self.encoder(post)
         f4 = self.fuse4(torch.cat([p4, q4], dim=1))
@@ -557,7 +565,44 @@ class GAMSFStage2(nn.Module):
         x = self.dec3(f4, f3)
         x = self.dec2(x, f2)
         x = self.dec1(x, f1)
-        return self.head(x)
+        logits = self.head(x)
+        if return_feat:
+            return logits, f4
+        return logits
+
+
+class GradientReverse(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x: torch.Tensor, lambd: float) -> torch.Tensor:
+        ctx.lambd = lambd
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output: torch.Tensor):
+        return -ctx.lambd * grad_output, None
+
+
+def grad_reverse(x: torch.Tensor, lambd: float) -> torch.Tensor:
+    return GradientReverse.apply(x, lambd)
+
+
+class DomainDiscriminator(nn.Module):
+    def __init__(self, in_dim: int):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, 128),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            nn.Linear(128, 64),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            nn.Linear(64, 1),
+        )
+
+    def forward(self, feat: torch.Tensor, grl_lambda: float) -> torch.Tensor:
+        pooled = torch.mean(feat, dim=(2, 3))
+        pooled = grad_reverse(pooled, grl_lambda)
+        return self.net(pooled).squeeze(1)
 
 
 def parse_aa_layout(text: str) -> Tuple[int, int, int]:
@@ -568,9 +613,7 @@ def parse_aa_layout(text: str) -> Tuple[int, int, int]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        "Paper-faithful GAMSF-style source-only two-stage training (localization + damage classification)"
-    )
+    parser = argparse.ArgumentParser("GAMSF + DANN UDA two-stage training")
     parser.add_argument("--source-dataset", type=str, required=True, choices=["xbd", "ida", "ian", "irma"])
     parser.add_argument("--target-dataset", type=str, required=True, choices=["xbd", "ida", "ian", "irma"])
     parser.add_argument("--xbd-root", type=str, default="/homes/j244s673/documents/wsu/phd/xview2")
@@ -578,10 +621,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ian-root", type=str, default="/homes/j244s673/documents/wsu/phd/idabd_disasteradaptivenet")
     parser.add_argument("--irma-root", type=str, default="/homes/j244s673/documents/wsu/phd/irma_disasteradaptivenet")
     parser.add_argument("--output-dir", type=str, required=True)
-    parser.add_argument("--img-size", type=int, default=256)
-    parser.add_argument("--stage1-epochs", type=int, default=60)
-    parser.add_argument("--stage2-epochs", type=int, default=120)
-    parser.add_argument("--batch-size", type=int, default=1)
+    parser.add_argument("--img-size", type=int, default=512)
+    parser.add_argument("--stage1-epochs", type=int, default=40)
+    parser.add_argument("--stage2-epochs", type=int, default=80)
+    parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
@@ -591,8 +634,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--save-every", type=int, default=1)
     parser.add_argument("--early-stopping-patience", type=int, default=10)
     parser.add_argument("--loc-threshold", type=float, default=0.5)
-    parser.add_argument("--aa-layout", type=str, default="2,4,2")
-    parser.add_argument("--attn-pool-size", type=int, default=32)
+    parser.add_argument("--aa-layout", type=str, default="4,4,2")
+    parser.add_argument("--stage1-domain-weight", type=float, default=0.05)
+    parser.add_argument("--stage2-domain-weight", type=float, default=0.05)
     return parser.parse_args()
 
 
@@ -608,15 +652,15 @@ def dataset_root_and_splits(name: str, args: argparse.Namespace) -> Tuple[str, s
     raise ValueError(name)
 
 
-def compute_loc_metrics(logits: torch.Tensor, loc_true: torch.Tensor, threshold: float) -> Dict[str, float]:
-    pred = (torch.sigmoid(logits) > threshold).float()
-    tp = int(((pred == 1) & (loc_true == 1)).sum().item())
-    fp = int(((pred == 1) & (loc_true == 0)).sum().item())
-    fn = int(((pred == 0) & (loc_true == 1)).sum().item())
-    inter = (pred * loc_true).sum(dim=(1, 2))
-    union = pred.sum(dim=(1, 2)) + loc_true.sum(dim=(1, 2))
-    dice = ((2.0 * inter + 1e-7) / (union + 1e-7)).mean().item()
-    return {"f1": F1Recorder(tp, fp, fn, "localization").f1, "dice": dice}
+def compute_grl_lambda(epoch: int, step: int, steps_per_epoch: int, total_epochs: int) -> float:
+    progress = ((epoch - 1) * steps_per_epoch + step) / max(1, total_epochs * steps_per_epoch)
+    return 2.0 / (1.0 + math.exp(-10.0 * progress)) - 1.0
+
+
+def cycle(loader: DataLoader):
+    while True:
+        for batch in loader:
+            yield batch
 
 
 @torch.no_grad()
@@ -626,7 +670,6 @@ def evaluate_stage1(model: GAMSFStage1, loader: DataLoader, criterion: BinaryFoc
     focal_meter = AverageMeter()
     dice_meter = AverageMeter()
     tp = fp = fn = 0
-    dice_list: List[float] = []
     for batch in loader:
         pre = batch["pre"].to(device, non_blocking=True)
         loc = batch["loc"].to(device, non_blocking=True)
@@ -652,13 +695,7 @@ def evaluate_stage1(model: GAMSFStage1, loader: DataLoader, criterion: BinaryFoc
 
 
 @torch.no_grad()
-def evaluate_pipeline(
-    stage1: GAMSFStage1,
-    stage2: GAMSFStage2,
-    loader: DataLoader,
-    loc_threshold: float,
-    device: torch.device,
-) -> Dict[str, object]:
+def evaluate_pipeline(stage1: GAMSFStage1, stage2: GAMSFStage2, loader: DataLoader, loc_threshold: float, device: torch.device) -> Dict[str, object]:
     stage1.eval()
     stage2.eval()
 
@@ -694,7 +731,6 @@ def evaluate_pipeline(
         valid_gt = (loc_true == 1) & (dmg_true_raw != 255)
         dmg_true = torch.zeros_like(dmg_true_raw)
         dmg_true[valid_gt] = dmg_true_raw[valid_gt] + 1
-
         dp = dmg_pred[valid_gt]
         dt = dmg_true[valid_gt]
         if dt.numel() > 0:
@@ -734,21 +770,21 @@ def evaluate_pipeline(
     }
 
 
-def save_checkpoint(save_path: Path, model: nn.Module, optimizer, scheduler, scaler, epoch: int, best_score: float, best_epoch: int, args: argparse.Namespace):
+def save_checkpoint(save_path: Path, model: nn.Module, optimizer, scheduler, scaler, epoch: int, best_score: float, best_epoch: int, args: argparse.Namespace, domain_disc: Optional[nn.Module] = None):
     save_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {
-            "epoch": epoch,
-            "model": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "scheduler": scheduler.state_dict() if scheduler is not None else None,
-            "scaler": scaler.state_dict() if scaler is not None else None,
-            "best_score": best_score,
-            "best_epoch": best_epoch,
-            "args": vars(args),
-        },
-        save_path,
-    )
+    state = {
+        "epoch": epoch,
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "scheduler": scheduler.state_dict() if scheduler is not None else None,
+        "scaler": scaler.state_dict() if scaler is not None else None,
+        "best_score": best_score,
+        "best_epoch": best_epoch,
+        "args": vars(args),
+    }
+    if domain_disc is not None:
+        state["domain_disc"] = domain_disc.state_dict()
+    torch.save(state, save_path)
 
 
 def write_target_test_outputs(results: Dict[str, object], output_dir: Path, target_name: str) -> None:
@@ -771,34 +807,36 @@ def write_target_test_outputs(results: Dict[str, object], output_dir: Path, targ
 
 def main() -> None:
     args = parse_args()
-    set_seed(args.seed)
     if args.source_dataset == args.target_dataset:
         raise ValueError("source_dataset and target_dataset must be different")
+    set_seed(args.seed)
 
-    aa_layout = parse_aa_layout(args.aa_layout)
-    attn_pool_size = int(args.attn_pool_size)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "stage1" / "checkpoints").mkdir(parents=True, exist_ok=True)
     (output_dir / "stage2" / "checkpoints").mkdir(parents=True, exist_ok=True)
 
+    with open(output_dir / "uda_config.json", "w", encoding="utf-8") as f:
+        json.dump({"source": args.source_dataset, "target": args.target_dataset, **vars(args)}, f, indent=2)
+
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
+    aa_layout = parse_aa_layout(args.aa_layout)
     print(f"Using device: {device}", flush=True)
-    print("Note: this is a paper-faithful GAMSF-style implementation, not the authors' official released code.", flush=True)
-    print(f"Adaptive Attention layout: {aa_layout}", flush=True)
-    print(f"Attention pooling size: {attn_pool_size}", flush=True)
+    print(f"Source dataset: {args.source_dataset}", flush=True)
+    print(f"Target dataset: {args.target_dataset}", flush=True)
 
     src_root, src_train_split, src_val_split, _ = dataset_root_and_splits(args.source_dataset, args)
-    tgt_root, _, _, tgt_test_split = dataset_root_and_splits(args.target_dataset, args)
-    print(f"Source: {args.source_dataset} | root={src_root}", flush=True)
-    print(f"Target: {args.target_dataset} | root={tgt_root}", flush=True)
+    tgt_root, tgt_train_split, tgt_val_split, tgt_test_split = dataset_root_and_splits(args.target_dataset, args)
 
-    src_train = XBDStyleDataset(src_root, src_train_split, args.img_size, True)
-    src_val = XBDStyleDataset(src_root, src_val_split, args.img_size, False)
-    tgt_test = XBDStyleDataset(tgt_root, tgt_test_split, args.img_size, False)
+    src_train = XBDStyleLabeledDataset(src_root, src_train_split, args.img_size, True)
+    src_val = XBDStyleLabeledDataset(src_root, src_val_split, args.img_size, False)
+    tgt_train_u = XBDStyleUnlabeledDataset(tgt_root, tgt_train_split, args.img_size, True)
+    tgt_val_u = XBDStyleUnlabeledDataset(tgt_root, tgt_val_split, args.img_size, True)
+    tgt_test = XBDStyleLabeledDataset(tgt_root, tgt_test_split, args.img_size, False)
 
     src_train_loader = DataLoader(src_train, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
     src_val_loader = DataLoader(src_val, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, drop_last=False)
+    tgt_u_loader = DataLoader(ConcatDataset([tgt_train_u, tgt_val_u]), batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
     tgt_test_loader = DataLoader(tgt_test, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, drop_last=False)
 
     loc_pos, loc_neg = src_train.get_localization_pixel_counts()
@@ -808,51 +846,64 @@ def main() -> None:
     inv = dmg_counts.sum() / dmg_counts
     dmg_class_weights = torch.tensor(inv / inv.sum() * len(inv), dtype=torch.float32, device=device)
 
-    # ---------------- Stage 1 ----------------
-    stage1 = GAMSFStage1(aa_layout=aa_layout, attn_pool_size=attn_pool_size).to(device)
-    stage1_optimizer = torch.optim.AdamW(stage1.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    stage1_scheduler = torch.optim.lr_scheduler.MultiStepLR(
-        stage1_optimizer,
-        milestones=sorted(set(max(1, int(args.stage1_epochs * x)) for x in (0.5, 0.75, 0.9))),
-        gamma=0.5,
-    )
+    print(f"Source train samples: {len(src_train)}", flush=True)
+    print(f"Source val samples:   {len(src_val)}", flush=True)
+    print(f"Target unlabeled train+val samples: {len(tgt_train_u) + len(tgt_val_u)}", flush=True)
+    print(f"Target test samples:  {len(tgt_test)}", flush=True)
+
+    # Stage 1
+    stage1 = GAMSFStage1(aa_layout=aa_layout).to(device)
+    stage1_disc = DomainDiscriminator(128).to(device)
+    stage1_optimizer = torch.optim.AdamW(list(stage1.parameters()) + list(stage1_disc.parameters()), lr=args.lr, weight_decay=args.weight_decay)
+    stage1_scheduler = torch.optim.lr_scheduler.MultiStepLR(stage1_optimizer, milestones=sorted(set(max(1, int(args.stage1_epochs * x)) for x in (0.5, 0.75, 0.9))), gamma=0.5)
     stage1_scaler = GradScaler(device.type, enabled=args.amp and device.type == "cuda") if USE_TORCH_AMP else GradScaler(enabled=args.amp and device.type == "cuda")
     loc_criterion = BinaryFocalDiceLoss(pos_weight=loc_pos_weight).to(device)
+    domain_criterion = nn.BCEWithLogitsLoss().to(device)
 
     stage1_best_score = -1.0
     stage1_best_epoch = 0
     stage1_wait = 0
     stage1_history: List[Dict[str, float | int]] = []
+    tgt_iter = cycle(tgt_u_loader)
+    stage1_steps = len(src_train_loader)
 
     for epoch in range(1, args.stage1_epochs + 1):
         stage1.train()
+        stage1_disc.train()
         total_meter = AverageMeter()
-        focal_meter = AverageMeter()
-        dice_meter = AverageMeter()
-        use_tqdm = tqdm is not None and sys.stderr.isatty()
-        iterator = tqdm(src_train_loader, desc=f"stage1 {epoch}/{args.stage1_epochs}") if use_tqdm else src_train_loader
-        for batch in iterator:
-            pre = batch["pre"].to(device, non_blocking=True)
-            loc = batch["loc"].to(device, non_blocking=True)
+        sup_meter = AverageMeter()
+        dom_meter = AverageMeter()
+        iterator = tqdm(src_train_loader, desc=f"stage1 {epoch}/{args.stage1_epochs}") if (tqdm is not None and sys.stderr.isatty()) else src_train_loader
+        for step, src_batch in enumerate(iterator, start=1):
+            tgt_batch = next(tgt_iter)
+            src_pre = src_batch["pre"].to(device, non_blocking=True)
+            src_loc = src_batch["loc"].to(device, non_blocking=True)
+            tgt_pre = tgt_batch["pre"].to(device, non_blocking=True)
+            grl_lambda = compute_grl_lambda(epoch, step, stage1_steps, args.stage1_epochs)
             stage1_optimizer.zero_grad(set_to_none=True)
-            if USE_TORCH_AMP:
-                with autocast(device_type=device.type, enabled=args.amp and device.type == "cuda"):
-                    logits = stage1(pre).squeeze(1)
-                    loss, focal, dice = loc_criterion(logits, loc)
-            else:
-                with autocast(enabled=args.amp and device.type == "cuda"):
-                    logits = stage1(pre).squeeze(1)
-                    loss, focal, dice = loc_criterion(logits, loc)
-            stage1_scaler.scale(loss).backward()
+            ctx = autocast(device_type=device.type, enabled=args.amp and device.type == "cuda") if USE_TORCH_AMP else autocast(enabled=args.amp and device.type == "cuda")
+            with ctx:
+                src_logits, src_feat = stage1(src_pre, return_feat=True)
+                src_logits = src_logits.squeeze(1)
+                _, src_focal, src_dice = loc_criterion(src_logits, src_loc)
+                sup_loss = src_focal + src_dice
+
+                tgt_logits, tgt_feat = stage1(tgt_pre, return_feat=True)
+                src_dom = stage1_disc(src_feat, grl_lambda)
+                tgt_dom = stage1_disc(tgt_feat, grl_lambda)
+                src_dom_t = torch.zeros_like(src_dom)
+                tgt_dom_t = torch.ones_like(tgt_dom)
+                dom_loss = 0.5 * (domain_criterion(src_dom, src_dom_t) + domain_criterion(tgt_dom, tgt_dom_t))
+                total_loss = sup_loss + args.stage1_domain_weight * dom_loss
+            stage1_scaler.scale(total_loss).backward()
             stage1_scaler.step(stage1_optimizer)
             stage1_scaler.update()
-            bs = pre.size(0)
-            total_meter.update(loss.item(), bs)
-            focal_meter.update(focal.item(), bs)
-            dice_meter.update(dice.item(), bs)
-            if use_tqdm:
-                iterator.set_postfix(loss=f"{total_meter.avg:.4f}", focal=f"{focal_meter.avg:.4f}", dice=f"{dice_meter.avg:.4f}")
-
+            bs = src_pre.size(0)
+            total_meter.update(total_loss.item(), bs)
+            sup_meter.update(sup_loss.item(), bs)
+            dom_meter.update(dom_loss.item(), bs)
+            if tqdm is not None and sys.stderr.isatty():
+                iterator.set_postfix(loss=f"{total_meter.avg:.4f}", sup=f"{sup_meter.avg:.4f}", dom=f"{dom_meter.avg:.4f}")
         stage1_scheduler.step()
         src_val_metrics = evaluate_stage1(stage1, src_val_loader, loc_criterion, device, args.loc_threshold)
         tgt_loc_metrics = evaluate_stage1(stage1, tgt_test_loader, loc_criterion, device, args.loc_threshold)
@@ -861,8 +912,8 @@ def main() -> None:
             "epoch": epoch,
             "lr": stage1_optimizer.param_groups[0]["lr"],
             "train_total_loss": total_meter.avg,
-            "train_focal": focal_meter.avg,
-            "train_dice": dice_meter.avg,
+            "train_supervised_loss": sup_meter.avg,
+            "train_domain_loss": dom_meter.avg,
             "src_val_loc_f1": src_val_metrics["loc_f1"],
             "src_val_loc_dice": src_val_metrics["loc_dice"],
             "src_val_score": val_score,
@@ -871,17 +922,16 @@ def main() -> None:
         }
         stage1_history.append(row)
         print(json.dumps({"stage": 1, **row}, indent=2), flush=True)
-
         if val_score > stage1_best_score:
             stage1_best_score = float(val_score)
             stage1_best_epoch = epoch
             stage1_wait = 0
-            save_checkpoint(output_dir / "stage1" / "checkpoints" / "best.pt", stage1, stage1_optimizer, stage1_scheduler, stage1_scaler, epoch, stage1_best_score, stage1_best_epoch, args)
+            save_checkpoint(output_dir / "stage1" / "checkpoints" / "best.pt", stage1, stage1_optimizer, stage1_scheduler, stage1_scaler, epoch, stage1_best_score, stage1_best_epoch, args, domain_disc=stage1_disc)
         else:
             stage1_wait += 1
-        save_checkpoint(output_dir / "stage1" / "checkpoints" / "last.pt", stage1, stage1_optimizer, stage1_scheduler, stage1_scaler, epoch, stage1_best_score, stage1_best_epoch, args)
+        save_checkpoint(output_dir / "stage1" / "checkpoints" / "last.pt", stage1, stage1_optimizer, stage1_scheduler, stage1_scaler, epoch, stage1_best_score, stage1_best_epoch, args, domain_disc=stage1_disc)
         if epoch % max(1, args.save_every) == 0:
-            save_checkpoint(output_dir / "stage1" / "checkpoints" / f"epoch_{epoch:03d}.pt", stage1, stage1_optimizer, stage1_scheduler, stage1_scaler, epoch, stage1_best_score, stage1_best_epoch, args)
+            save_checkpoint(output_dir / "stage1" / "checkpoints" / f"epoch_{epoch:03d}.pt", stage1, stage1_optimizer, stage1_scheduler, stage1_scaler, epoch, stage1_best_score, stage1_best_epoch, args, domain_disc=stage1_disc)
         with open(output_dir / "stage1" / "history.json", "w", encoding="utf-8") as f:
             json.dump(stage1_history, f, indent=2)
         if stage1_wait >= args.early_stopping_patience:
@@ -894,15 +944,12 @@ def main() -> None:
     with open(output_dir / "stage1" / "target_test_metrics.json", "w", encoding="utf-8") as f:
         json.dump(stage1_target_metrics, f, indent=2)
 
-    # ---------------- Stage 2 ----------------
-    stage2 = GAMSFStage2(aa_layout=aa_layout, attn_pool_size=attn_pool_size).to(device)
+    # Stage 2
+    stage2 = GAMSFStage2(aa_layout=aa_layout).to(device)
     stage2.load_stage1_encoder(stage1)
-    stage2_optimizer = torch.optim.AdamW(stage2.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    stage2_scheduler = torch.optim.lr_scheduler.MultiStepLR(
-        stage2_optimizer,
-        milestones=sorted(set(max(1, int(args.stage2_epochs * x)) for x in (0.5, 0.75, 0.9))),
-        gamma=0.5,
-    )
+    stage2_disc = DomainDiscriminator(128).to(device)
+    stage2_optimizer = torch.optim.AdamW(list(stage2.parameters()) + list(stage2_disc.parameters()), lr=args.lr, weight_decay=args.weight_decay)
+    stage2_scheduler = torch.optim.lr_scheduler.MultiStepLR(stage2_optimizer, milestones=sorted(set(max(1, int(args.stage2_epochs * x)) for x in (0.5, 0.75, 0.9))), gamma=0.5)
     stage2_scaler = GradScaler(device.type, enabled=args.amp and device.type == "cuda") if USE_TORCH_AMP else GradScaler(enabled=args.amp and device.type == "cuda")
     dmg_criterion = MulticlassFocalDiceLoss(class_weights=dmg_class_weights, ignore_index=255).to(device)
 
@@ -910,38 +957,52 @@ def main() -> None:
     stage2_best_epoch = 0
     stage2_wait = 0
     stage2_history: List[Dict[str, float | int]] = []
+    tgt_iter2 = cycle(tgt_u_loader)
+    stage2_steps = len(src_train_loader)
 
     for epoch in range(1, args.stage2_epochs + 1):
         stage2.train()
+        stage2_disc.train()
         total_meter = AverageMeter()
-        focal_meter = AverageMeter()
-        dice_meter = AverageMeter()
-        use_tqdm = tqdm is not None and sys.stderr.isatty()
-        iterator = tqdm(src_train_loader, desc=f"stage2 {epoch}/{args.stage2_epochs}") if use_tqdm else src_train_loader
-        for batch in iterator:
-            pre = batch["pre"].to(device, non_blocking=True)
-            post = batch["post"].to(device, non_blocking=True)
-            loc = batch["loc"].to(device, non_blocking=True)
-            dmg = batch["dmg"].to(device, non_blocking=True)
+        sup_meter = AverageMeter()
+        dom_meter = AverageMeter()
+        iterator = tqdm(src_train_loader, desc=f"stage2 {epoch}/{args.stage2_epochs}") if (tqdm is not None and sys.stderr.isatty()) else src_train_loader
+        for step, src_batch in enumerate(iterator, start=1):
+            tgt_batch = next(tgt_iter2)
+            src_pre = src_batch["pre"].to(device, non_blocking=True)
+            src_post = src_batch["post"].to(device, non_blocking=True)
+            src_loc = src_batch["loc"].to(device, non_blocking=True)
+            src_dmg = src_batch["dmg"].to(device, non_blocking=True)
+
+            tgt_pre = tgt_batch["pre"].to(device, non_blocking=True)
+            tgt_post = tgt_batch["post"].to(device, non_blocking=True)
+            with torch.no_grad():
+                tgt_loc_logits = stage1(tgt_pre).squeeze(1)
+                tgt_loc = (torch.sigmoid(tgt_loc_logits) > args.loc_threshold).float()
+
+            grl_lambda = compute_grl_lambda(epoch, step, stage2_steps, args.stage2_epochs)
             stage2_optimizer.zero_grad(set_to_none=True)
-            if USE_TORCH_AMP:
-                with autocast(device_type=device.type, enabled=args.amp and device.type == "cuda"):
-                    logits = stage2(pre, post, loc)
-                    loss, focal, dice = dmg_criterion(logits, dmg)
-            else:
-                with autocast(enabled=args.amp and device.type == "cuda"):
-                    logits = stage2(pre, post, loc)
-                    loss, focal, dice = dmg_criterion(logits, dmg)
-            stage2_scaler.scale(loss).backward()
+            ctx = autocast(device_type=device.type, enabled=args.amp and device.type == "cuda") if USE_TORCH_AMP else autocast(enabled=args.amp and device.type == "cuda")
+            with ctx:
+                src_logits, src_feat = stage2(src_pre, src_post, src_loc, return_feat=True)
+                sup_loss, _, _ = dmg_criterion(src_logits, src_dmg)
+
+                _, tgt_feat = stage2(tgt_pre, tgt_post, tgt_loc, return_feat=True)
+                src_dom = stage2_disc(src_feat, grl_lambda)
+                tgt_dom = stage2_disc(tgt_feat, grl_lambda)
+                src_dom_t = torch.zeros_like(src_dom)
+                tgt_dom_t = torch.ones_like(tgt_dom)
+                dom_loss = 0.5 * (domain_criterion(src_dom, src_dom_t) + domain_criterion(tgt_dom, tgt_dom_t))
+                total_loss = sup_loss + args.stage2_domain_weight * dom_loss
+            stage2_scaler.scale(total_loss).backward()
             stage2_scaler.step(stage2_optimizer)
             stage2_scaler.update()
-            bs = pre.size(0)
-            total_meter.update(loss.item(), bs)
-            focal_meter.update(focal.item(), bs)
-            dice_meter.update(dice.item(), bs)
-            if use_tqdm:
-                iterator.set_postfix(loss=f"{total_meter.avg:.4f}", focal=f"{focal_meter.avg:.4f}", dice=f"{dice_meter.avg:.4f}")
-
+            bs = src_pre.size(0)
+            total_meter.update(total_loss.item(), bs)
+            sup_meter.update(sup_loss.item(), bs)
+            dom_meter.update(dom_loss.item(), bs)
+            if tqdm is not None and sys.stderr.isatty():
+                iterator.set_postfix(loss=f"{total_meter.avg:.4f}", sup=f"{sup_meter.avg:.4f}", dom=f"{dom_meter.avg:.4f}")
         stage2_scheduler.step()
         src_val_pipeline = evaluate_pipeline(stage1, stage2, src_val_loader, args.loc_threshold, device)
         tgt_test_pipeline = evaluate_pipeline(stage1, stage2, tgt_test_loader, args.loc_threshold, device)
@@ -950,8 +1011,8 @@ def main() -> None:
             "epoch": epoch,
             "lr": stage2_optimizer.param_groups[0]["lr"],
             "train_total_loss": total_meter.avg,
-            "train_focal": focal_meter.avg,
-            "train_dice": dice_meter.avg,
+            "train_supervised_loss": sup_meter.avg,
+            "train_domain_loss": dom_meter.avg,
             "src_val_localization_f1": src_val_pipeline["localization_f1"],
             "src_val_damage_f1": src_val_pipeline["damage_f1"],
             "src_val_score": val_score,
@@ -964,17 +1025,16 @@ def main() -> None:
         }
         stage2_history.append(row)
         print(json.dumps({"stage": 2, **row}, indent=2), flush=True)
-
         if val_score > stage2_best_score:
             stage2_best_score = float(val_score)
             stage2_best_epoch = epoch
             stage2_wait = 0
-            save_checkpoint(output_dir / "stage2" / "checkpoints" / "best.pt", stage2, stage2_optimizer, stage2_scheduler, stage2_scaler, epoch, stage2_best_score, stage2_best_epoch, args)
+            save_checkpoint(output_dir / "stage2" / "checkpoints" / "best.pt", stage2, stage2_optimizer, stage2_scheduler, stage2_scaler, epoch, stage2_best_score, stage2_best_epoch, args, domain_disc=stage2_disc)
         else:
             stage2_wait += 1
-        save_checkpoint(output_dir / "stage2" / "checkpoints" / "last.pt", stage2, stage2_optimizer, stage2_scheduler, stage2_scaler, epoch, stage2_best_score, stage2_best_epoch, args)
+        save_checkpoint(output_dir / "stage2" / "checkpoints" / "last.pt", stage2, stage2_optimizer, stage2_scheduler, stage2_scaler, epoch, stage2_best_score, stage2_best_epoch, args, domain_disc=stage2_disc)
         if epoch % max(1, args.save_every) == 0:
-            save_checkpoint(output_dir / "stage2" / "checkpoints" / f"epoch_{epoch:03d}.pt", stage2, stage2_optimizer, stage2_scheduler, stage2_scaler, epoch, stage2_best_score, stage2_best_epoch, args)
+            save_checkpoint(output_dir / "stage2" / "checkpoints" / f"epoch_{epoch:03d}.pt", stage2, stage2_optimizer, stage2_scheduler, stage2_scaler, epoch, stage2_best_score, stage2_best_epoch, args, domain_disc=stage2_disc)
         with open(output_dir / "stage2" / "history.json", "w", encoding="utf-8") as f:
             json.dump(stage2_history, f, indent=2)
         if stage2_wait >= args.early_stopping_patience:

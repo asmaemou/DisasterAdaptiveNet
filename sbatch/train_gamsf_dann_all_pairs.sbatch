@@ -6,19 +6,18 @@
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --time=120:00:00
-#SBATCH --job-name=gamsf_all
+#SBATCH --job-name=gamsf_uda_all
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 
 set -euo pipefail
 export PYTHONUNBUFFERED=1
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 cd /homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/sbatch
 mkdir -p logs
 
 PROJECT_ROOT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
-PY_SCRIPT="$PROJECT_ROOT/train_gamsf_source_only.py"
+PY_SCRIPT="$PROJECT_ROOT/train_gamsf_dann.py"
 
 XBD_ROOT=/homes/j244s673/documents/wsu/phd/xview2
 IDA_ROOT=/homes/j244s673/documents/wsu/phd/idabd_real_disasteradaptivenet
@@ -74,7 +73,7 @@ DATASETS=(xbd ida ian irma)
 run_one_pair () {
   local SRC="$1"
   local TGT="$2"
-  local RUN_DIR="${BASE_OUT}/gamsf_${SRC}_to_${TGT}"
+  local RUN_DIR="${BASE_OUT}/gamsf_dann_${SRC}_to_${TGT}"
   local PAIR_LOG="logs/${SLURM_JOB_NAME}_${SLURM_JOB_ID}_${SRC}_to_${TGT}.log"
 
   mkdir -p "$RUN_DIR"
@@ -106,11 +105,9 @@ run_one_pair () {
     --output-dir "$RUN_DIR" \
     --stage1-epochs 40 \
     --stage2-epochs 80 \
-    --batch-size 1 \
+    --batch-size 4 \
     --num-workers 8 \
-    --img-size 256 \
-    --aa-layout 2,4,2 \
-    --attn-pool-size 32 \
+    --img-size 512 \
     --save-every 1 \
     --early-stopping-patience 10 \
     --amp 2>&1 | tee -a "$PROJECT_ROOT/sbatch/$PAIR_LOG"
