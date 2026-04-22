@@ -12,7 +12,7 @@
 
 set -eo pipefail
 
-PROJECT_DIR="/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/STCA_changeos"
+PROJECT_DIR="/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/STCA"
 RAW_XVIEW2_ROOT="/homes/j244s673/documents/wsu/phd/xview2"
 PREPARED_ROOT="${PROJECT_DIR}/data/xview2_torchange"
 WORK_DIR="${PROJECT_DIR}/runs/tier3_to_train_changeos_r18_stca"
