@@ -21,7 +21,7 @@ cd "${PROJECT_DIR}"
 
 mkdir -p logs
 mkdir -p runs
-mkdir -p runs/${RUN_NAME}
+mkdir -p "runs/${RUN_NAME}"
 
 source /homes/j244s673/miniforge3/etc/profile.d/conda.sh
 conda activate "${CONDA_ENV}"
@@ -41,7 +41,7 @@ python --version
 nvidia-smi || true
 
 python scripts/train_stca_xview2.py \
-  --data-root "${DATA_ROOT}" \
+  --root "${DATA_ROOT}" \
   --source-split tier3 \
   --target-train-split train \
   --target-val-split test \
