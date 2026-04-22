@@ -42,11 +42,11 @@ nvidia-smi || true
 
 python scripts/train_stca_xview2.py \
   --root "${DATA_ROOT}" \
+  --work-dir "runs/${RUN_NAME}" \
   --source-split tier3 \
-  --target-train-split train \
-  --target-val-split test \
-  --target-test-split hold \
-  --work-dir "runs/${RUN_NAME}"
+  --target-split train \
+  --val-split test \
+  --eval-split hold
 
 EXIT_CODE=$?
 
