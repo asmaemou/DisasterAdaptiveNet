@@ -10,41 +10,49 @@
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 
-set -euo pipefail
+set -eo pipefail
 
-# Edit these if needed
 PROJECT_DIR="/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/STCA"
 DATA_ROOT="/homes/j244s673/documents/wsu/phd/xview2"
+CONDA_ENV="disasteradaptivenet_cu128"
 RUN_NAME="tier3_to_train_stca"
-CONDA_ENV="disasteradaptivenet"
 
 cd "${PROJECT_DIR}"
-mkdir -p logs runs
 
-source ~/.bashrc
+mkdir -p logs
+mkdir -p runs
+mkdir -p runs/${RUN_NAME}
+
+source /homes/j244s673/miniforge3/etc/profile.d/conda.sh
 conda activate "${CONDA_ENV}"
 
-echo "HOST: $(hostname)"
-echo "DATE: $(date)"
+echo "=================================================="
+echo "JOB_ID:      ${SLURM_JOB_ID}"
+echo "HOSTNAME:    $(hostname)"
+echo "START TIME:  $(date)"
 echo "PROJECT_DIR: ${PROJECT_DIR}"
-echo "DATA_ROOT: ${DATA_ROOT}"
+echo "DATA_ROOT:   ${DATA_ROOT}"
+echo "CONDA_ENV:   ${CONDA_ENV}"
+echo "RUN_NAME:    ${RUN_NAME}"
+echo "=================================================="
+
+which python
+python --version
+nvidia-smi || true
 
 python scripts/train_stca_xview2.py \
-  --root "${DATA_ROOT}" \
-  --work-dir "${PROJECT_DIR}/runs/${RUN_NAME}" \
-  --cache-dir "${PROJECT_DIR}/runs/${RUN_NAME}/mask_cache" \
+  --data-root "${DATA_ROOT}" \
   --source-split tier3 \
-  --target-split train \
-  --val-split test \
-  --eval-split hold \
-  --crop-size 512 \
-  --batch-size 4 \
-  --workers 8 \
-  --source-epochs 12 \
-  --adapt-epochs 6 \
-  --source-lr 1e-4 \
-  --adapt-lr 5e-5 \
-  --stca-weight 0.2 \
-  --target-threshold 0.5 \
-  --target-feature-samples 64 \
-  --source-feature-samples 64
+  --target-train-split train \
+  --target-val-split test \
+  --target-test-split hold \
+  --work-dir "runs/${RUN_NAME}"
+
+EXIT_CODE=$?
+
+echo "=================================================="
+echo "END TIME:    $(date)"
+echo "EXIT CODE:   ${EXIT_CODE}"
+echo "=================================================="
+
+exit ${EXIT_CODE}
