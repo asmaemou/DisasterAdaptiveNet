@@ -15,7 +15,7 @@ set -eo pipefail
 PROJECT_DIR="/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/STCA"
 XBD_ROOT="/homes/j244s673/documents/wsu/phd/xview2"
 IDA_ROOT="/homes/j244s673/documents/wsu/phd/idabd_real_disasteradaptivenet"
-WORK_DIR="${PROJECT_DIR}/runs/transformer_dann_xbd_tier3_to_idabd"
+WORK_DIR="${PROJECT_DIR}/runs/transformer_dann_xbd_train_to_idabd"
 ENV_PY="/homes/j244s673/miniforge3/envs/stca_changeos_py311/bin/python"
 
 mkdir -p "${PROJECT_DIR}/logs" "${PROJECT_DIR}/runs"
@@ -46,9 +46,9 @@ PY
   --target-root "${IDA_ROOT}" \
   --target-split train \
   --val-root "${IDA_ROOT}" \
-  --val-split test \
+  --val-split val \
   --eval-root "${IDA_ROOT}" \
-  --eval-split hold \
+  --eval-split test \
   --epochs 20 \
   --batch-size 2 \
   --lr 1e-4 \
