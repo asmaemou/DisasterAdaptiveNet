@@ -15,16 +15,32 @@ set -eo pipefail
 PROJECT_DIR="/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/STCA"
 PREPARED_ROOT="${PROJECT_DIR}/data/xview2_torchange"
 WORK_DIR="${PROJECT_DIR}/runs/tier3_to_train_changeos_r18_stca"
-CONDA_ENV="stca_changeos_py311"
+ENV_PY="/homes/j244s673/miniforge3/envs/stca_changeos_py311/bin/python"
 
 mkdir -p "${PROJECT_DIR}/logs" "${PROJECT_DIR}/runs"
 cd "${PROJECT_DIR}"
 
-source /homes/j244s673/miniforge3/etc/profile.d/conda.sh
-conda activate "${CONDA_ENV}"
+unset PYTHONPATH
+export PYTHONNOUSERSITE=1
 export WANDB_MODE=disabled
 
-python scripts/train_changeos_stca.py \
+echo "===== ENV CHECK ====="
+"${ENV_PY}" -V
+nvidia-smi || true
+
+"${ENV_PY}" - <<'PY'
+import sys, torch, torchange, ever, numpy
+print("python exe:", sys.executable)
+print("torch file:", torch.__file__)
+print("torchange file:", torchange.__file__)
+print("numpy file:", numpy.__file__)
+print("cuda available:", torch.cuda.is_available())
+print("torch cuda:", torch.version.cuda)
+if not torch.cuda.is_available():
+    raise SystemExit("CUDA is not available inside the Slurm job.")
+PY
+
+"${ENV_PY}" scripts/train_changeos_stca.py \
   --prepared-root "${PREPARED_ROOT}" \
   --source-split tier3 \
   --target-split train \
