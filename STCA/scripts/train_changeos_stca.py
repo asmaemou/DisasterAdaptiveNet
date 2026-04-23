@@ -306,13 +306,14 @@ def compute_pair_loss(
         m = tgt_vec.shape[1]
         src_lab = src_mask_ds[b].reshape(-1)[src_idx]
 
+
         pair_cat = torch.cat(
             [
-                tgt_vec.unsqueeze(2).expand(channels, m, k).permute(0, 2, 1),
-                src_vec.unsqueeze(1).expand(channels, k, m),
+                tgt_vec.unsqueeze(2).expand(channels, m, k).permute(0, 2, 1),  # [C, k, m]
+                src_vec.unsqueeze(2).expand(channels, k, m),                   # [C, k, m]
             ],
             dim=0,
-        ).unsqueeze(0)
+        ).unsqueeze(0)  # [1, 2C, k, m]
 
         pair_fused = model.decoder.fuse_conv(pair_cat)
         logits = model.head.dam_cls(pair_fused, upsample=False)
