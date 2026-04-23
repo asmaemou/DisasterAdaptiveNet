@@ -365,10 +365,25 @@ def evaluate(model: ChangeOS, loader: DataLoader, device: torch.device) -> Dict[
         dam_logit = model.head.dam_cls(st_features)
         loc_pred, dam_pred = model.head.object_based_infer(loc_logit, dam_logit, logit=True)
 
-        loc_pred = loc_pred.cpu().numpy().squeeze(1)
-        dam_pred = dam_pred.cpu().numpy()
+        loc_pred = loc_pred.detach().cpu().numpy()
+        dam_pred = dam_pred.detach().cpu().numpy()
         gt_loc = y["masks"][0].numpy()
         gt_dam = y["masks"][1].numpy()
+
+        # robust shape handling
+        if loc_pred.ndim == 4 and loc_pred.shape[1] == 1:
+            loc_pred = loc_pred[:, 0]
+        elif loc_pred.ndim == 4 and loc_pred.shape[-1] == 1:
+            loc_pred = loc_pred[..., 0]
+        elif loc_pred.ndim != 3:
+            raise RuntimeError(f"Unexpected loc_pred shape: {loc_pred.shape}")
+
+        if dam_pred.ndim == 4 and dam_pred.shape[1] == 1:
+            dam_pred = dam_pred[:, 0]
+        elif dam_pred.ndim == 4 and dam_pred.shape[-1] == 1:
+            dam_pred = dam_pred[..., 0]
+        elif dam_pred.ndim != 3:
+            raise RuntimeError(f"Unexpected dam_pred shape: {dam_pred.shape}")
 
         for i in range(loc_pred.shape[0]):
             loc_scores.append(binary_f1(loc_pred[i], gt_loc[i] > 0))
