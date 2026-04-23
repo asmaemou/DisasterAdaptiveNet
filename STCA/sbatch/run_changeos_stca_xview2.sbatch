@@ -13,7 +13,7 @@
 set -eo pipefail
 
 PROJECT_DIR="/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/STCA"
-PREPARED_ROOT="${PROJECT_DIR}/data/xview2_torchange"
+PREPARED_ROOT="/homes/j244s673/documents/wsu/phd/xview2"
 WORK_DIR="${PROJECT_DIR}/runs/tier3_to_train_changeos_r18_stca"
 ENV_PY="/homes/j244s673/miniforge3/envs/stca_changeos_py311/bin/python"
 
