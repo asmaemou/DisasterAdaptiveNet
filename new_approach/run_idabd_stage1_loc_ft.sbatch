@@ -10,28 +10,31 @@
 #SBATCH --output=logs/idabd_loc_ft_%j.out
 #SBATCH --error=logs/idabd_loc_ft_%j.err
 
-set -euo pipefail
+# Do NOT use set -u before sourcing ~/.bashrc on this cluster.
+# /etc/bashrc references BASHRCSOURCED before it is defined.
+set -eo pipefail
 
 echo "START: $(date)"
 echo "HOST:  $(hostname)"
 echo "JOB:   ${SLURM_JOB_ID}"
 
-# Go to the xView2 first-place solution folder where zoo/ should be importable.
 cd /homes/j244s673/documents/wsu/phd/xview2_1st_place_solution/new_approach
 mkdir -p logs
 
-# Activate your environment. Change this if your env name is different.
+# Temporarily disable unbound-variable checking while loading bashrc/conda.
+set +u
 source ~/.bashrc
 conda activate disasteradaptivenet_cu128
+set -u
 
-python - <<'PY'
+python - <<'PYTORCH'
 import torch
 print('cuda available:', torch.cuda.is_available())
 print('torch version:', torch.__version__)
 print('cuda version:', torch.version.cuda)
 if torch.cuda.is_available():
     print('gpu:', torch.cuda.get_device_name(0))
-PY
+PYTORCH
 
 python train_idabd_stage1_loc_da_calib_fusion_modified.py \
   --train_all \
