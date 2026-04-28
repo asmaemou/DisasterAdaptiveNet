@@ -19,6 +19,17 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(CHANGEFORMER_ROOT) not in sys.path:
     sys.path.insert(0, str(CHANGEFORMER_ROOT))
 
+# Prevent timm from importing the broken wandb package.
+# We do not use W&B in this script.
+import types
+
+wandb_stub = types.ModuleType("wandb")
+wandb_stub.init = lambda *args, **kwargs: None
+wandb_stub.log = lambda *args, **kwargs: None
+wandb_stub.finish = lambda *args, **kwargs: None
+wandb_stub.run = None
+sys.modules["wandb"] = wandb_stub
+
 import cv2
 import numpy as np
 import torch
