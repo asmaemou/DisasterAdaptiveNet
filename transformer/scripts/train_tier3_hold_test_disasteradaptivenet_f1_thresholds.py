@@ -8,12 +8,24 @@ import argparse
 import random
 from typing import Dict, Any, List, Tuple
 
+# Add project root to Python path.
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
-    
+
+# Compatibility patch for older scikit-learn with NumPy 2.x.
+try:
+    import numpy as np
+    import numpy.core.numeric as np_numeric
+
+    if not hasattr(np_numeric, "ComplexWarning"):
+        from numpy.exceptions import ComplexWarning
+        np_numeric.ComplexWarning = ComplexWarning
+except Exception as exc:
+    print(f"Warning: NumPy/sklearn compatibility patch failed: {exc}")
+
 import torch
 from torch import optim
 from torch.utils import data as torch_data
@@ -31,7 +43,6 @@ except Exception as exc:
             pass
 
     wandb = DummyWandb()
-import numpy as np
 
 from utils import datasets, losses, measurers, metrics
 from utils.models import DisasterAdaptiveNet
