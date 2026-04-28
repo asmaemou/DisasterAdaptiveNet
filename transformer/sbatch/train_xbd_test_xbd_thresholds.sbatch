@@ -116,7 +116,7 @@ nvidia-smi || true
 echo "===================="
 
 CMD=(
-  python -u train_tier3_hold_test_disasteradaptivenet_f1_thresholds.py
+  python -u transformer/scripts/train_tier3_hold_test_disasteradaptivenet_f1_thresholds.py
   --experiment-name "$EXPERIMENT_NAME"
   --data-root "$SPLIT_ROOT"
   --output-dir "$RUN_DIR"
