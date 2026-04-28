@@ -284,10 +284,12 @@ class XBDDamageDataset(Dataset):
     def get_localization_pixel_counts(self) -> Tuple[int, int]:
         pos = 0
         neg = 0
+
         for s in self.samples:
             loc = self._read_mask(s.pre_target_path) > 0
             pos += int(loc.sum())
             neg += int((~loc).sum())
+
         return pos, neg
 
     def get_damage_class_counts(self) -> np.ndarray:
@@ -368,10 +370,12 @@ class BCEDiceLoss(nn.Module):
 
     def forward(self, logits: torch.Tensor, target: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         bce = self.bce(logits, target)
+
         prob = torch.sigmoid(logits)
         inter = (prob * target).sum(dim=(1, 2))
         union = prob.sum(dim=(1, 2)) + target.sum(dim=(1, 2))
         dice_loss = 1.0 - ((2.0 * inter + 1e-7) / (union + 1e-7)).mean()
+
         return bce, dice_loss
 
 
@@ -454,6 +458,7 @@ def evaluate_f1(
     model.eval()
 
     loc_tp = loc_fp = loc_fn = 0
+
     dmg_counts = {
         1: {"tp": 0, "fp": 0, "fn": 0},
         2: {"tp": 0, "fp": 0, "fn": 0},
@@ -556,6 +561,7 @@ def scan_thresholds(
 
         for th in thresholds:
             results = evaluate_f1(model, loader, device, th)
+
             writer.writerow([
                 th,
                 results["score"],
@@ -671,7 +677,14 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument("--embed-dim", type=int, default=256)
     parser.add_argument("--save-every", type=int, default=1)
-    parser.add_argument("--early-stopping-patience", type=int, default=10)
+    parser.add_argument("--early-stopping-patience", type=int, default=15)
+
+    parser.add_argument(
+        "--max-grad-norm",
+        type=float,
+        default=1.0,
+        help="Gradient clipping max norm. Use <=0 to disable.",
+    )
 
     parser.add_argument("--loc-bce-weight", type=float, default=1.0)
     parser.add_argument("--loc-dice-weight", type=float, default=1.0)
@@ -711,6 +724,10 @@ def main() -> None:
     print(f"Image size: {args.img_size}", flush=True)
     print(f"Batch size: {args.batch_size}", flush=True)
     print(f"Epochs: {args.epochs}", flush=True)
+    print(f"Learning rate: {args.lr}", flush=True)
+    print(f"Weight decay: {args.weight_decay}", flush=True)
+    print("Scheduler: linear decay to zero", flush=True)
+    print(f"Max grad norm: {args.max_grad_norm}", flush=True)
     print(f"Thresholds: {args.thresholds}", flush=True)
     print("No domain adaptation.", flush=True)
     print("===========================================", flush=True)
@@ -719,9 +736,32 @@ def main() -> None:
     val_ds = XBDDamageDataset(args.xbd_root, args.val_split, args.img_size, training=False)
     test_ds = XBDDamageDataset(args.xbd_root, args.test_split, args.img_size, training=False)
 
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
-    val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, drop_last=False)
-    test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, drop_last=False)
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        drop_last=True,
+    )
+
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        drop_last=False,
+    )
+
+    test_loader = DataLoader(
+        test_ds,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        drop_last=False,
+    )
 
     print(f"Train samples: {len(train_ds)}", flush=True)
     print(f"Val samples:   {len(val_ds)}", flush=True)
@@ -742,12 +782,23 @@ def main() -> None:
     print(f"Damage class weights:    {dmg_weights.detach().cpu().numpy().tolist()}", flush=True)
 
     loc_criterion = BCEDiceLoss(pos_weight=loc_pos_weight).to(device)
-    dmg_criterion = nn.CrossEntropyLoss(weight=dmg_weights, ignore_index=255).to(device)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    dmg_criterion = nn.CrossEntropyLoss(
+        weight=dmg_weights,
+        ignore_index=255,
+    ).to(device)
 
-    milestones = sorted(set(max(1, int(args.epochs * x)) for x in (0.5, 0.75, 0.9)))
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.5)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+        betas=(0.9, 0.999),
+    )
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optimizer,
+        lr_lambda=lambda epoch: max(0.0, 1.0 - (epoch / max(1, args.epochs))),
+    )
 
     if USE_TORCH_AMP:
         scaler = GradScaler(device.type, enabled=args.amp and device.type == "cuda")
@@ -762,7 +813,9 @@ def main() -> None:
 
     for epoch in range(1, args.epochs + 1):
         model.train()
+
         print(f"\nStarting epoch {epoch}/{args.epochs}", flush=True)
+        print(f"Current LR: {optimizer.param_groups[0]['lr']:.8f}", flush=True)
 
         total_meter = AverageMeter()
         loc_bce_meter = AverageMeter()
@@ -783,20 +836,36 @@ def main() -> None:
                 with autocast(device_type=device.type, enabled=args.amp and device.type == "cuda"):
                     logits = get_final_logits(model(pre, post))
                     total_loss, loc_bce, loc_dice, dmg_ce = compute_losses(
-                        logits, loc, dmg, loc_criterion, dmg_criterion, args
+                        logits,
+                        loc,
+                        dmg,
+                        loc_criterion,
+                        dmg_criterion,
+                        args,
                     )
             else:
                 with autocast(enabled=args.amp and device.type == "cuda"):
                     logits = get_final_logits(model(pre, post))
                     total_loss, loc_bce, loc_dice, dmg_ce = compute_losses(
-                        logits, loc, dmg, loc_criterion, dmg_criterion, args
+                        logits,
+                        loc,
+                        dmg,
+                        loc_criterion,
+                        dmg_criterion,
+                        args,
                     )
 
             scaler.scale(total_loss).backward()
+
+            if args.max_grad_norm is not None and args.max_grad_norm > 0:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+
             scaler.step(optimizer)
             scaler.update()
 
             bs = pre.size(0)
+
             total_meter.update(total_loss.item(), bs)
             loc_bce_meter.update(loc_bce.item(), bs)
             loc_dice_meter.update(loc_dice.item(), bs)

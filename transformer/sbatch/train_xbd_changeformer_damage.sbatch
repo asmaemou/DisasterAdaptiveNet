@@ -25,21 +25,22 @@ TEST_SPLIT=test
 
 OUTPUT_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_xbd_test_xbd_changeformer
 
-EPOCHS=40
+EPOCHS=80
 BATCH_SIZE=8
 NUM_WORKERS=8
 
-# ChangeFormer repo examples use 256 image size.
-# Start with 256. Use 512 only if GPU memory allows.
+# ChangeFormer paper/code uses 256 crops.
+# Keep 256 first. Use 512 only if GPU memory allows.
 IMG_SIZE=256
 
-LEARNING_RATE=2e-4
-WEIGHT_DECAY=1e-4
+LEARNING_RATE=1e-4
+WEIGHT_DECAY=0.01
 SEED=42
 EMBED_DIM=256
 
 SAVE_EVERY=1
-EARLY_STOPPING_PATIENCE=10
+EARLY_STOPPING_PATIENCE=15
+MAX_GRAD_NORM=1.0
 
 LOC_BCE_WEIGHT=1.0
 LOC_DICE_WEIGHT=1.0
@@ -84,6 +85,8 @@ echo "NUM_WORKERS: $NUM_WORKERS"
 echo "IMG_SIZE: $IMG_SIZE"
 echo "LEARNING_RATE: $LEARNING_RATE"
 echo "WEIGHT_DECAY: $WEIGHT_DECAY"
+echo "SCHEDULER: linear_decay_to_zero"
+echo "MAX_GRAD_NORM: $MAX_GRAD_NORM"
 echo "EMBED_DIM: $EMBED_DIM"
 echo "THRESHOLDS: $THRESHOLDS"
 echo "CHANGEFORMER_ROOT: /homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/external/ChangeFormer"
@@ -107,6 +110,7 @@ CMD=(
   --embed-dim "$EMBED_DIM"
   --save-every "$SAVE_EVERY"
   --early-stopping-patience "$EARLY_STOPPING_PATIENCE"
+  --max-grad-norm "$MAX_GRAD_NORM"
   --loc-bce-weight "$LOC_BCE_WEIGHT"
   --loc-dice-weight "$LOC_DICE_WEIGHT"
   --dmg-ce-weight "$DMG_CE_WEIGHT"
