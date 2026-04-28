@@ -12,7 +12,19 @@ import torch
 from torch import optim
 from torch.utils import data as torch_data
 
-import wandb
+try:
+    import wandb
+except Exception as exc:
+    print(f"Warning: wandb import failed, using dummy wandb. Error: {exc}")
+
+    class DummyWandb:
+        def init(self, *args, **kwargs):
+            print("wandb.init skipped")
+
+        def log(self, *args, **kwargs):
+            pass
+
+    wandb = DummyWandb()
 import numpy as np
 
 from utils import datasets, losses, measurers, metrics
