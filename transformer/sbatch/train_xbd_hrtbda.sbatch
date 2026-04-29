@@ -16,26 +16,28 @@ export PYTHONUNBUFFERED=1
 cd /homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
 mkdir -p transformer/sbatch/logs
 
-EXPERIMENT_NAME=train_xbd_test_xbd_hrtbda
+EXPERIMENT_NAME=train_plus_tier3_test_xbd_hrtbda
 
 XBD_ROOT=/homes/j244s673/documents/wsu/phd/xview2
-TRAIN_SPLIT=tier3
+
+# Train on BOTH train and tier3.
+TRAIN_SPLITS=(train tier3)
+
 VAL_SPLIT=hold
 TEST_SPLIT=test
 
-OUTPUT_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_xbd_test_xbd_hrtbda
+OUTPUT_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_plus_tier3_test_xbd_hrtbda
 
-# HRTBDA paper used LR=1e-4.
-# Paper reports Phase I optimum around 150 epochs and Phase II around 30.
-# This first run uses smaller practical values. Increase later if needed.
-PHASE1_EPOCHS=80
-PHASE2_EPOCHS=40
+# Closer to HRTBDA paper.
+PHASE1_EPOCHS=150
+PHASE2_EPOCHS=30
 
-# HRTBDA-style model is heavier than ChangeFormer.
-# Start with 4. Try 8 only if GPU memory is fine.
-BATCH_SIZE=4
+# Full xBD resolution.
+# BATCH_SIZE=1 is safer for IMG_SIZE=1024.
+# If this fits easily, you can later try BATCH_SIZE=2.
+BATCH_SIZE=1
 NUM_WORKERS=8
-IMG_SIZE=256
+IMG_SIZE=1024
 
 LEARNING_RATE=1e-4
 WEIGHT_DECAY=0.01
@@ -47,7 +49,10 @@ WINDOW_SIZE=8
 MAX_GRAD_NORM=1.0
 
 SAVE_EVERY=1
-EARLY_STOPPING_PATIENCE=15
+
+# Paper does not clearly use early stopping.
+# Set very high so it effectively trains the planned epochs.
+EARLY_STOPPING_PATIENCE=999
 
 FOCAL_GAMMA=2.0
 LOC_LOSS_WEIGHT=1.0
@@ -82,7 +87,7 @@ python --version
 echo "MODEL: HRTBDA-inspired HRNet + DCSwin + CSF"
 echo "DOMAIN_ADAPTATION: none"
 echo "XBD_ROOT: $XBD_ROOT"
-echo "TRAIN_SPLIT: $TRAIN_SPLIT"
+echo "TRAIN_SPLITS: ${TRAIN_SPLITS[*]}"
 echo "VAL_SPLIT: $VAL_SPLIT"
 echo "TEST_SPLIT: $TEST_SPLIT"
 echo "OUTPUT_DIR: $OUTPUT_DIR"
@@ -97,6 +102,8 @@ echo "BASE_CHANNELS: $BASE_CHANNELS"
 echo "DECODER_CHANNELS: $DECODER_CHANNELS"
 echo "WINDOW_SIZE: $WINDOW_SIZE"
 echo "MAX_GRAD_NORM: $MAX_GRAD_NORM"
+echo "SAVE_EVERY: $SAVE_EVERY"
+echo "EARLY_STOPPING_PATIENCE: $EARLY_STOPPING_PATIENCE"
 echo "FOCAL_GAMMA: $FOCAL_GAMMA"
 echo "THRESHOLDS: $THRESHOLDS"
 nvidia-smi || true
@@ -106,7 +113,7 @@ CMD=(
   python -u transformer/scripts/train_xbd_hrtbda.py
   --phase both
   --xbd-root "$XBD_ROOT"
-  --train-split "$TRAIN_SPLIT"
+  --train-split "${TRAIN_SPLITS[@]}"
   --val-split "$VAL_SPLIT"
   --test-split "$TEST_SPLIT"
   --output-dir "$OUTPUT_DIR"

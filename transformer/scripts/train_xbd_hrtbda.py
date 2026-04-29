@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
 import random
 import sys
 from dataclasses import dataclass
@@ -43,6 +42,8 @@ def set_seed(seed: int) -> None:
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+    # Better speed for fixed-size 1024 images.
     torch.backends.cudnn.deterministic = False
     torch.backends.cudnn.benchmark = True
 
@@ -53,6 +54,7 @@ def set_seed(seed: int) -> None:
 @dataclass(frozen=True)
 class XBDSample:
     stem: str
+    split: str
     pre_image_path: Path
     post_image_path: Path
     pre_target_path: Path
@@ -109,6 +111,9 @@ class XBDHRTBDADataset(Dataset):
     Expected structure:
 
     /homes/j244s673/documents/wsu/phd/xview2/
+      train/
+        images/
+        targets/
       tier3/
         images/
         targets/
@@ -118,6 +123,9 @@ class XBDHRTBDADataset(Dataset):
       test/
         images/
         targets/
+
+    Supports one or more training splits, for example:
+      --train-split train tier3
 
     Uses:
       *_pre_disaster.png
@@ -137,24 +145,32 @@ class XBDHRTBDADataset(Dataset):
       255 ignored / other labels
     """
 
-    def __init__(self, root: str | Path, split: str, image_size: int, training: bool):
+    def __init__(self, root: str | Path, split: str | List[str] | Tuple[str, ...], image_size: int, training: bool):
         self.root = Path(root)
-        self.split = split
+
+        if isinstance(split, (list, tuple)):
+            self.splits = [str(s) for s in split]
+        else:
+            self.splits = [str(split)]
+
+        self.split = "+".join(self.splits)
         self.image_size = int(image_size)
         self.training = bool(training)
 
-        self.split_root = self.root / split
-        self.images_dir = self.split_root / "images"
-        self.targets_dir = self.split_root / "targets"
+        for split_name in self.splits:
+            split_root = self.root / split_name
+            images_dir = split_root / "images"
+            targets_dir = split_root / "targets"
 
-        if not self.images_dir.exists():
-            raise FileNotFoundError(f"Expected images dir not found: {self.images_dir}")
-        if not self.targets_dir.exists():
-            raise FileNotFoundError(f"Expected targets dir not found: {self.targets_dir}")
+            if not images_dir.exists():
+                raise FileNotFoundError(f"Expected images dir not found: {images_dir}")
+            if not targets_dir.exists():
+                raise FileNotFoundError(f"Expected targets dir not found: {targets_dir}")
 
         self.samples = self._collect_samples()
+
         if not self.samples:
-            raise RuntimeError(f"No paired samples found under {self.split_root}")
+            raise RuntimeError(f"No paired samples found under {self.root} for splits {self.splits}")
 
         self.mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)[:, None, None]
         self.std = np.array([0.229, 0.224, 0.225], dtype=np.float32)[:, None, None]
@@ -191,39 +207,54 @@ class XBDHRTBDADataset(Dataset):
         return target
 
     def _collect_samples(self) -> List[XBDSample]:
-        post_images: List[Path] = []
-
-        for pattern in [
-            "*_post_disaster.png",
-            "*_post_disaster.jpg",
-            "*_post_disaster.jpeg",
-            "*_post_disaster.tif",
-            "*_post_disaster.tiff",
-            "*_post_disaster.bmp",
-        ]:
-            post_images.extend(self.images_dir.glob(pattern))
-
-        post_images = sorted(post_images)
         samples: List[XBDSample] = []
+        seen: set[str] = set()
 
-        for post_path in post_images:
-            prefix = post_path.stem.replace("_post_disaster", "")
-            ext = post_path.suffix
+        for split_name in self.splits:
+            split_root = self.root / split_name
+            images_dir = split_root / "images"
+            targets_dir = split_root / "targets"
 
-            pre_path = self.images_dir / f"{prefix}_pre_disaster{ext}"
-            pre_tgt = self.targets_dir / f"{prefix}_pre_disaster_target.png"
-            post_tgt = self.targets_dir / f"{prefix}_post_disaster_target.png"
+            post_images: List[Path] = []
 
-            if pre_path.exists() and pre_tgt.exists() and post_tgt.exists():
-                samples.append(
-                    XBDSample(
-                        stem=prefix,
-                        pre_image_path=pre_path,
-                        post_image_path=post_path,
-                        pre_target_path=pre_tgt,
-                        post_target_path=post_tgt,
+            for pattern in [
+                "*_post_disaster.png",
+                "*_post_disaster.jpg",
+                "*_post_disaster.jpeg",
+                "*_post_disaster.tif",
+                "*_post_disaster.tiff",
+                "*_post_disaster.bmp",
+            ]:
+                post_images.extend(images_dir.glob(pattern))
+
+            post_images = sorted(post_images)
+
+            for post_path in post_images:
+                prefix = post_path.stem.replace("_post_disaster", "")
+                ext = post_path.suffix
+
+                pre_path = images_dir / f"{prefix}_pre_disaster{ext}"
+                pre_tgt = targets_dir / f"{prefix}_pre_disaster_target.png"
+                post_tgt = targets_dir / f"{prefix}_post_disaster_target.png"
+
+                # Avoid accidental duplicates if the same sample exists in both train and tier3.
+                key = prefix
+
+                if key in seen:
+                    continue
+
+                if pre_path.exists() and pre_tgt.exists() and post_tgt.exists():
+                    seen.add(key)
+                    samples.append(
+                        XBDSample(
+                            stem=prefix,
+                            split=split_name,
+                            pre_image_path=pre_path,
+                            post_image_path=post_path,
+                            pre_target_path=pre_tgt,
+                            post_target_path=post_tgt,
+                        )
                     )
-                )
 
         return samples
 
@@ -266,7 +297,7 @@ class XBDHRTBDADataset(Dataset):
             "loc": torch.from_numpy(loc).float(),
             "target5": torch.from_numpy(target5).long(),
             "stem": s.stem,
-            "split": self.split,
+            "split": s.split,
         }
 
     def localization_counts(self) -> Tuple[int, int]:
@@ -383,7 +414,6 @@ class LayerNorm2d(nn.Module):
 
 
 def window_partition(x: torch.Tensor, window_size: int) -> torch.Tensor:
-    # x: B, H, W, C
     b, h, w, c = x.shape
     x = x.view(b, h // window_size, window_size, w // window_size, window_size, c)
     windows = x.permute(0, 1, 3, 2, 4, 5).contiguous()
@@ -391,7 +421,6 @@ def window_partition(x: torch.Tensor, window_size: int) -> torch.Tensor:
 
 
 def window_reverse(windows: torch.Tensor, window_size: int, h: int, w: int, b: int) -> torch.Tensor:
-    # windows: B*nW, ws*ws, C
     c = windows.shape[-1]
     x = windows.view(b, h // window_size, w // window_size, window_size, window_size, c)
     x = x.permute(0, 1, 3, 2, 4, 5).contiguous()
@@ -410,7 +439,6 @@ class WindowSelfAttention(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: B,C,H,W
         b, c, h, w = x.shape
         ws = self.window_size
 
@@ -684,7 +712,6 @@ class CSFModule(nn.Module):
         apre = self._attention(fpre)
         apost = self._attention(fpost)
 
-        # Cross focus: emphasize differences and shared damage-relevant information.
         diff = torch.abs(apost - apre)
         pre_refined = apre + diff
         post_refined = apost + diff
@@ -786,6 +813,7 @@ class MulticlassFocalDiceLoss(nn.Module):
         )
 
         valid = target != self.ignore_index
+
         if valid.any():
             ce_valid = ce[valid]
             pt = torch.exp(-ce_valid)
@@ -809,7 +837,6 @@ class MulticlassFocalDiceLoss(nn.Module):
 
         dice_per_class = 1.0 - (2.0 * inter + 1e-7) / (denom + 1e-7)
 
-        # Weighted dice, normalized.
         w = self.class_weights / self.class_weights.sum().clamp_min(1e-7)
         dice = (dice_per_class * w).sum()
 
@@ -824,7 +851,6 @@ def make_loc_pos_weight(dataset: XBDHRTBDADataset) -> torch.Tensor:
 def make_class_weights(dataset: XBDHRTBDADataset) -> torch.Tensor:
     counts = dataset.class5_counts().astype(np.float64)
 
-    # sqrt inverse frequency avoids absurdly huge weights for rare classes.
     freq = counts / counts.sum()
     weights = 1.0 / np.sqrt(freq + 1e-12)
     weights = weights / weights.mean()
@@ -1175,10 +1201,12 @@ def train_phase1(args: argparse.Namespace, device: torch.device) -> Path:
                 with autocast(device_type=device.type, enabled=args.amp and device.type == "cuda"):
                     logits = model(pre)
                     loss, focal, dice = criterion(logits, loc)
+                    loss = args.loc_loss_weight * loss
             else:
                 with autocast(enabled=args.amp and device.type == "cuda"):
                     logits = model(pre)
                     loss, focal, dice = criterion(logits, loc)
+                    loss = args.loc_loss_weight * loss
 
             backward_step(loss, model, optimizer, scaler, args)
 
@@ -1513,8 +1541,10 @@ def test_phase2(args: argparse.Namespace, device: torch.device, checkpoint_path:
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
 
+    train_splits_text = "+".join(args.train_split) if isinstance(args.train_split, list) else str(args.train_split)
+
     lines = [
-        "Experiment: HRTBDA-inspired xBD tier3 -> hold -> test",
+        f"Experiment: HRTBDA-inspired xBD {train_splits_text} -> {args.val_split} -> {args.test_split}",
         f"Best Phase II epoch selected on hold: {best_epoch}",
         f"Localization F1: {results['localization_f1']:.6f}",
         f"No Damage F1:    {results['damage_f1_no_damage']:.6f}",
@@ -1546,17 +1576,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--phase", type=str, default="both", choices=["both", "phase1", "phase2", "test"])
 
     parser.add_argument("--xbd-root", type=str, required=True)
-    parser.add_argument("--train-split", type=str, default="tier3")
+
+    parser.add_argument(
+        "--train-split",
+        type=str,
+        nargs="+",
+        default=["tier3"],
+        help="One or more training splits, e.g. --train-split train tier3",
+    )
+
     parser.add_argument("--val-split", type=str, default="hold")
     parser.add_argument("--test-split", type=str, default="test")
     parser.add_argument("--output-dir", type=str, required=True)
 
-    parser.add_argument("--phase1-epochs", type=int, default=80)
-    parser.add_argument("--phase2-epochs", type=int, default=40)
+    parser.add_argument("--phase1-epochs", type=int, default=150)
+    parser.add_argument("--phase2-epochs", type=int, default=30)
 
-    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--num-workers", type=int, default=8)
-    parser.add_argument("--img-size", type=int, default=256)
+    parser.add_argument("--img-size", type=int, default=1024)
 
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight-decay", type=float, default=0.01)
@@ -1569,7 +1607,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--window-size", type=int, default=8)
 
     parser.add_argument("--save-every", type=int, default=1)
-    parser.add_argument("--early-stopping-patience", type=int, default=15)
+    parser.add_argument("--early-stopping-patience", type=int, default=999)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
 
     parser.add_argument("--focal-gamma", type=float, default=2.0)
@@ -1601,7 +1639,7 @@ def main() -> None:
     print(f"Phase: {args.phase}", flush=True)
     print(f"Device: {device}", flush=True)
     print(f"xBD root: {args.xbd_root}", flush=True)
-    print(f"Train split: {args.train_split}", flush=True)
+    print(f"Train split(s): {args.train_split}", flush=True)
     print(f"Val split: {args.val_split}", flush=True)
     print(f"Test split: {args.test_split}", flush=True)
     print(f"Output dir: {args.output_dir}", flush=True)
