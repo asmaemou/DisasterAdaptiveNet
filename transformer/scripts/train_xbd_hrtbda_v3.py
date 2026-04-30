@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-claude
-HRTBDA v2 — key improvements over v1: train_xbd_hrtbda.py:
+HRTBDA v2 — key improvements over v2:
 
   1. BinaryFocalDiceLoss: pt now computed from UNWEIGHTED bce so focal
      modulation is correct (the v1 bug caused pt~0 for all positives,
@@ -29,6 +28,15 @@ HRTBDA v2 — key improvements over v1: train_xbd_hrtbda.py:
   8. Auxiliary localization head in Phase II: an extra 1-ch output predicts
      building vs background. This gives the shared backbone a direct
      localization gradient during Phase II, closing the loc-F1 gap.
+
+  9. MulticlassFocalDiceLoss: pt is now computed from UNWEIGHTED CE, then
+     class weights are applied to the loss value. This avoids the same focal
+     modulation bug that was already fixed for binary localization.
+
+ 10. CutMix now patches the auxiliary localization mask too, and the double
+     probability gate was removed. With cutmix_prob=0.3 and batch_size=1,
+     the old code applied CutMix only about 9% of the time; this version
+     applies it at the requested per-sample probability.
 """
 from __future__ import annotations
 
@@ -641,6 +649,14 @@ class BinaryFocalDiceLoss(nn.Module):
 
 
 class MulticlassFocalDiceLoss(nn.Module):
+    """
+    Multiclass focal + Dice loss.
+
+    Important: focal pt is computed from UNWEIGHTED CE. Class weights are
+    applied after the focal factor is computed. This prevents boosted rare
+    classes, especially minor damage, from making pt artificially tiny and
+    disabling focal down-weighting.
+    """
     def __init__(self, class_weights=None, gamma=2.0, ignore_index=255):
         super().__init__()
         self.gamma        = float(gamma)
@@ -650,12 +666,23 @@ class MulticlassFocalDiceLoss(nn.Module):
         self.register_buffer("class_weights", class_weights.float())
 
     def forward(self, logits, target):
-        ce    = F.cross_entropy(logits, target, weight=self.class_weights,
-                                ignore_index=self.ignore_index, reduction="none")
         valid = target != self.ignore_index
+
+        # Unweighted CE for pt computation.
+        ce_plain = F.cross_entropy(
+            logits, target,
+            ignore_index=self.ignore_index,
+            reduction="none",
+        )
+
         if valid.any():
-            ce_v  = ce[valid]; pt = torch.exp(-ce_v)
-            focal = ((1.0 - pt) ** self.gamma * ce_v).mean()
+            ce_v = ce_plain[valid]
+            pt   = torch.exp(-ce_v)
+
+            target_v = target[valid]
+            class_w  = self.class_weights[target_v]
+
+            focal = (((1.0 - pt) ** self.gamma) * ce_v * class_w).mean()
         else:
             focal = logits.sum() * 0.0
 
@@ -702,46 +729,54 @@ def cutmix_batch(
     pre: torch.Tensor,
     post: torch.Tensor,
     target5: torch.Tensor,
+    loc: torch.Tensor,
     rare_indices: List[int],
     dataset: XBDHRTBDADataset,
     p: float = 0.3,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    For each sample in the batch with probability p, paste a random crop
-    from a rare-damage tile on top of it (pre, post, and target5 all patched
-    consistently).  Alpha is sampled from Beta(1,1) = Uniform(0,1).
+    Per-sample CutMix for Phase II.
+
+    With probability p for each item in the batch, paste a random crop from a
+    rare-damage tile into pre, post, target5, and loc. Patching loc matters
+    because Phase II also trains the auxiliary localization head.
     """
-    if not rare_indices or np.random.rand() > p:
-        return pre, post, target5
+    if not rare_indices or p <= 0.0:
+        return pre, post, target5, loc
 
     B, C, H, W = pre.shape
-    pre, post, target5 = pre.clone(), post.clone(), target5.clone()
+    pre, post, target5, loc = pre.clone(), post.clone(), target5.clone(), loc.clone()
 
     for i in range(B):
         if np.random.rand() > p:
             continue
+
         j   = random.choice(rare_indices)
         src = dataset[j]
 
         s_pre  = src["pre"].unsqueeze(0).to(pre.device)
         s_post = src["post"].unsqueeze(0).to(post.device)
         s_tgt  = src["target5"].unsqueeze(0).to(target5.device)
+        s_loc  = src["loc"].unsqueeze(0).to(loc.device)
 
-        # Random crop size: 20–50% of image
+        # Random crop size: 20–50% of image.
         lam    = np.random.uniform(0.2, 0.5)
         ch, cw = int(H * lam), int(W * lam)
-        # Source crop position
+
+        # Source crop position.
         sy     = np.random.randint(0, H - ch + 1)
         sx     = np.random.randint(0, W - cw + 1)
-        # Destination paste position
+
+        # Destination paste position.
         dy     = np.random.randint(0, H - ch + 1)
         dx     = np.random.randint(0, W - cw + 1)
 
-        pre[i, :, dy:dy+ch, dx:dx+cw]     = s_pre[0, :, sy:sy+ch, sx:sx+cw]
-        post[i, :, dy:dy+ch, dx:dx+cw]    = s_post[0, :, sy:sy+ch, sx:sx+cw]
-        target5[i, dy:dy+ch, dx:dx+cw]    = s_tgt[0, sy:sy+ch, sx:sx+cw]
+        pre[i, :, dy:dy+ch, dx:dx+cw]  = s_pre[0, :, sy:sy+ch, sx:sx+cw]
+        post[i, :, dy:dy+ch, dx:dx+cw] = s_post[0, :, sy:sy+ch, sx:sx+cw]
+        target5[i, dy:dy+ch, dx:dx+cw] = s_tgt[0, sy:sy+ch, sx:sx+cw]
+        loc[i, dy:dy+ch, dx:dx+cw]     = s_loc[0, sy:sy+ch, sx:sx+cw]
 
-    return pre, post, target5
+    return pre, post, target5, loc
 
 
 # ─────────────────────────────────────────────
@@ -901,20 +936,27 @@ def train_phase1(args, device) -> Path:
 
     best_f1 = best_threshold = -1.0; best_epoch = 0; no_improve = 0; history = []; start_epoch = 1
     hist_path = out_dir / "history_phase1.json"
-    if hist_path.exists():
-        try:
-            history = json.load(open(hist_path, encoding="utf-8"))
-            if history:
-                br       = max(history, key=lambda r: float(r.get("val_localization_f1", -1)))
-                best_f1  = float(br.get("val_localization_f1", -1))
-                best_epoch = int(br.get("epoch", 0))
-                best_threshold = float(br.get("val_best_threshold", 0.5))
-                print(f"Loaded Phase I history: {len(history)} rows | best_epoch={best_epoch} | best_f1={best_f1:.6f}", flush=True)
-        except Exception as e:
-            print(f"WARNING: Could not load Phase I history: {e}", flush=True); history = []
 
+    # Important: do NOT load old history/checkpoint state unless the user explicitly
+    # resumes. Reusing the same output directory after changing the code can otherwise
+    # leave stale best metrics/checkpoints from an older run and cause Phase II to load
+    # the wrong phase1_best.pt.
     resume_path = Path(args.resume_phase1_from) if getattr(args,"resume_phase1_from","") else None
+    if not resume_path and hist_path.exists():
+        print(f"Ignoring existing Phase I history because --resume-phase1-from was not set: {hist_path}", flush=True)
+
     if resume_path and resume_path.exists():
+        if hist_path.exists():
+            try:
+                history = json.load(open(hist_path, encoding="utf-8"))
+                if history:
+                    br       = max(history, key=lambda r: float(r.get("val_localization_f1", -1)))
+                    best_f1  = float(br.get("val_localization_f1", -1))
+                    best_epoch = int(br.get("epoch", 0))
+                    best_threshold = float(br.get("val_best_threshold", 0.5))
+                    print(f"Loaded Phase I history: {len(history)} rows | best_epoch={best_epoch} | best_f1={best_f1:.6f}", flush=True)
+            except Exception as e:
+                print(f"WARNING: Could not load Phase I history: {e}", flush=True); history = []
         print(f"Resuming Phase I from {resume_path}", flush=True)
         ckpt  = torch.load(resume_path, map_location=device)
         (model.module if isinstance(model, nn.DataParallel) else model).load_state_dict(ckpt["model"], strict=True)
@@ -1037,9 +1079,9 @@ def train_phase2(args, device, phase1_ckpt: Optional[Path]) -> Path:
             target = batch["target5"].to(device, non_blocking=True)
             loc    = batch["loc"].to(device, non_blocking=True)
 
-            # FIX 7 — CutMix: paste rare-damage crops into batch
-            pre, post, target = cutmix_batch(pre, post, target, rare_indices, train_ds,
-                                             p=args.cutmix_prob)
+            # FIX 7/10 — CutMix: paste rare-damage crops into images, damage labels, and aux loc labels
+            pre, post, target, loc = cutmix_batch(pre, post, target, loc, rare_indices, train_ds,
+                                                  p=args.cutmix_prob)
 
             optimizer.zero_grad(set_to_none=True)
             ctx = (autocast(device_type=device.type, enabled=args.amp and device.type=="cuda")

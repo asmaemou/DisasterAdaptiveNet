@@ -1,5 +1,4 @@
 #!/bin/bash
-# improvement over train_xbd_hrtbda.sbatch
 #SBATCH -p wsu_soc_kshirsagar.q
 #SBATCH -N 1
 #SBATCH --ntasks=1
@@ -8,28 +7,34 @@
 #SBATCH --gres=gpu:1
 #SBATCH --time=96:00:00
 #SBATCH --job-name=hrtbda_v2_xbd
-#SBATCH --output=logs/%x_%j.out
-#SBATCH --error=logs/%x_%j.err
+#SBATCH --output=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.out
+#SBATCH --error=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.err
 
 set -euo pipefail
 export PYTHONUNBUFFERED=1
 
-cd /homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
-mkdir -p transformer/sbatch/logs
+# NOTE:
+# Slurm needs the --output/--error directory to exist before sbatch opens the job log.
+# Run this once before submitting if needed:
+#   mkdir -p /homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/transformer/sbatch/logs
+
+REPO_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
+cd "$REPO_DIR"
+mkdir -p "$REPO_DIR/transformer/sbatch/logs"
 
 XBD_ROOT=/homes/j244s673/documents/wsu/phd/xview2
 TRAIN_SPLITS=(train tier3)
 VAL_SPLIT=hold
 TEST_SPLIT=test
 
-OUTPUT_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_plus_tier3_test_xbd_hrtbda_v2
+OUTPUT_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_plus_tier3_test_xbd_hrtbda_v2_fixed_fresh
 
 # ── Epoch counts ──────────────────────────────────────────────────────────────
 PHASE1_EPOCHS=150
-PHASE2_EPOCHS=80          # was 30; raised because best was at epoch 9
+PHASE2_EPOCHS=80
 
 # ── LR schedule ───────────────────────────────────────────────────────────────
-WARMUP_EPOCHS=10          # NEW: linear warmup before cosine decay
+WARMUP_EPOCHS=5
 
 # ── Batch / image ─────────────────────────────────────────────────────────────
 BATCH_SIZE=1
@@ -51,9 +56,9 @@ MAX_GRAD_NORM=1.0
 FOCAL_GAMMA=2.0
 LOC_LOSS_WEIGHT=1.0
 CLS_LOSS_WEIGHT=1.0
-AUX_LOC_WEIGHT=0.3        # NEW: weight of aux localization head in Phase II
-MINOR_DAMAGE_BOOST=3.0    # NEW: extra multiplier on minor-damage class weight
-CUTMIX_PROB=0.3           # NEW: probability of applying CutMix per sample
+AUX_LOC_WEIGHT=0.3
+MINOR_DAMAGE_BOOST=3.0
+CUTMIX_PROB=0.3
 
 # ── Misc ──────────────────────────────────────────────────────────────────────
 SAVE_EVERY=1
@@ -74,11 +79,14 @@ conda activate disasteradaptivenet_cu128
 
 echo "===== JOB INFO ====="
 date; hostname; pwd; which python; python --version
-echo "MODEL: HRTBDA v2  (4-stage backbone, fixed focal-pt, inv-freq weights,"
-echo "       warmup+cosine LR, CutMix, aux-loc head, scale-jitter aug)"
+echo "MODEL: HRTBDA v2 fixed"
+echo "       4-stage HRNet-like backbone + DCSwin/DCMLP + CSF"
+echo "       fixes: unweighted multiclass focal-pt, CutMix patches loc,"
+echo "              no double CutMix probability gate, warmup+cosine LR,"
+echo "              aux-loc head, inverse-frequency class weights"
 echo "PHASE1_EPOCHS: $PHASE1_EPOCHS"
 echo "PHASE2_EPOCHS: $PHASE2_EPOCHS"
-echo "WARMUP_EPOCHS: $WARMUP_EPOCHS"
+echo "WARMUP_EPOCHS: $WARMUP_EPOCHS  # Phase I; Phase II uses 3 internally"
 echo "AUX_LOC_WEIGHT: $AUX_LOC_WEIGHT"
 echo "MINOR_DAMAGE_BOOST: $MINOR_DAMAGE_BOOST"
 echo "CUTMIX_PROB: $CUTMIX_PROB"
@@ -86,7 +94,7 @@ nvidia-smi || true
 echo "===================="
 
 CMD=(
-  python -u transformer/scripts/train_xbd_hrtbda_v2.py
+  python -u transformer/scripts/train_xbd_hrtbda_v3.py
   --phase both
   --xbd-root "$XBD_ROOT"
   --train-split "${TRAIN_SPLITS[@]}"
@@ -114,7 +122,7 @@ CMD=(
   --aux-loc-weight    "$AUX_LOC_WEIGHT"
   --minor-damage-boost "$MINOR_DAMAGE_BOOST"
   --cutmix-prob       "$CUTMIX_PROB"
-  --amp                                   # enable AMP — cuts memory; faster convergence
+  --amp
   --thresholds $THRESHOLDS
 )
 
