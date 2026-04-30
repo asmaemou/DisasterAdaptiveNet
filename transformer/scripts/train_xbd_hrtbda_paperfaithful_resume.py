@@ -1771,6 +1771,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser("HRTBDA paper-faithful xBD building damage assessment")
 
     parser.add_argument("--phase", type=str, default="both", choices=["both", "phase1", "phase2", "test"])
+    parser.add_argument(
+        "--resume-phase1-from",
+        type=str,
+        default="",
+        help="Optional Phase I checkpoint path to resume from, e.g. checkpoints/phase1_last.pt",
+    )
     parser.add_argument("--xbd-root", type=str, required=True)
 
     parser.add_argument(
