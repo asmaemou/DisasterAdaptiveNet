@@ -112,7 +112,7 @@ echo "Found resume checkpoint:"
 ls -lh "$RESUME_PHASE1_FROM"
 
 CMD=(
-  python -u transformer/scripts/train_xbd_hrtbda_paperfaithful.py
+  python -u transformer/scripts/train_xbd_hrtbda_paperfaithful_resume.py
   --phase both
   --resume-phase1-from "$RESUME_PHASE1_FROM"
   --xbd-root "$XBD_ROOT"
