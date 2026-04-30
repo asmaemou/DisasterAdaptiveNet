@@ -27,7 +27,7 @@ TRAIN_SPLITS=(train tier3)
 VAL_SPLIT=hold
 TEST_SPLIT=test
 
-OUTPUT_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_plus_tier3_test_xbd_hrtbda_v2_fixed_fresh
+OUTPUT_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_plus_tier3_test_xbd_hrtbda_v3
 
 # ── Epoch counts ──────────────────────────────────────────────────────────────
 PHASE1_EPOCHS=150
