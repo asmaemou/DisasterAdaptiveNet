@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:1
-#SBATCH --time=48:00:00
+#SBATCH --time=168:00:00
 #SBATCH --job-name=hrtbda_pf_resume
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
