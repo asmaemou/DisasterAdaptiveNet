@@ -1952,10 +1952,19 @@ def train_phase1(args: argparse.Namespace, device: torch.device) -> Path:
     history = []
     start_epoch = 1
 
-    # Load existing Phase I history so a resumed run keeps the same record
-    # and does not duplicate already-finished epochs.
+    # Load existing Phase I history only when explicitly resuming.
+    # This avoids accidentally reusing stale Phase-I best metrics/checkpoints
+    # when running a new full two-stage experiment in an existing folder.
     history_path = output_dir / "history_phase1.json"
-    if history_path.exists():
+    resume_path = Path(args.resume_phase1_from) if getattr(args, "resume_phase1_from", "") else None
+
+    if resume_path is None and history_path.exists():
+        print(
+            f"Ignoring existing Phase I history because --resume-phase1-from was not set: {history_path}",
+            flush=True,
+        )
+
+    if resume_path is not None and history_path.exists():
         try:
             with open(history_path, "r", encoding="utf-8") as f:
                 history = json.load(f)
@@ -1974,8 +1983,6 @@ def train_phase1(args: argparse.Namespace, device: torch.device) -> Path:
         except Exception as e:
             print(f"WARNING: Could not load existing Phase I history: {e}", flush=True)
             history = []
-
-    resume_path = Path(args.resume_phase1_from) if getattr(args, "resume_phase1_from", "") else None
 
     if resume_path is not None:
         if not resume_path.exists():
@@ -2624,7 +2631,7 @@ def test_phase2(args: argparse.Namespace, device: torch.device, checkpoint_path:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser("HRTBDA-inspired xBD building damage assessment")
 
-    parser.add_argument("--phase", type=str, default="phase2_test", choices=["both", "phase1", "phase2", "phase2_test", "test", "inspect_phase1"])
+    parser.add_argument("--phase", type=str, default="both", choices=["both", "phase1", "phase2", "phase2_test", "test", "inspect_phase1"])
 
     parser.add_argument(
         "--resume-phase1-from",
