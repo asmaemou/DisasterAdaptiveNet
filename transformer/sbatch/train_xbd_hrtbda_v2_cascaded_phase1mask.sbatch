@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH -p wsu_soc_kshirsagar.q
-#SBATCH -w compute202516
 #SBATCH -N 1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
