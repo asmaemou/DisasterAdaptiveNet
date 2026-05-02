@@ -1,3 +1,4 @@
+#this is the code i have used for the final results of localization and damage classification
 #!/bin/bash
 #SBATCH -p wsu_soc_kshirsagar.q
 #SBATCH -N 1

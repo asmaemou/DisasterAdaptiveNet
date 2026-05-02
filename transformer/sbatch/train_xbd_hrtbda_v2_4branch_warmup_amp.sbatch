@@ -1,3 +1,4 @@
+#this code i use for phase 1 localization train on xbd(train+tier3)
 #!/bin/bash
 #SBATCH -p wsu_soc_kshirsagar.q
 #SBATCH -N 1
