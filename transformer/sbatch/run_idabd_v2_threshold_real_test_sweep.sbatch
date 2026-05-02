@@ -1,3 +1,4 @@
+#this script i use to test the idaBD
 #!/bin/bash
 #SBATCH -p wsu_soc_kshirsagar.q
 #SBATCH -N 1

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+#this is the script i am using to test the idaBd dataset
 """
 IDA-BD adapter for the HRTBDA v2 cascaded Phase-I-mask pipeline.
 
