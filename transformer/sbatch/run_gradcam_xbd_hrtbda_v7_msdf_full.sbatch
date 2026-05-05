@@ -59,4 +59,3 @@ python -u transformer/scripts/gradcam_xbd_hrtbda_v7_msdf_full.py \
   --window-size 8
 
 echo "Done."
-SH
