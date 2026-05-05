@@ -47,7 +47,7 @@ python -u transformer/scripts/gradcam_xbd_hrtbda_v7_msdf_full.py \
   --output-dir /homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_plus_tier3_test_xbd_hrtbda_v7_msdf_full_two_stage/gradcam_visuals \
   --test-split test \
   --sample-count 8 \
-  --cam-classes minor major destroyed \
+  --cam-classes no minor major destroyed \
   --target-layer change_fusion.0 \
   --score-mask pred_class \
   --postprocess-dilation minor \
