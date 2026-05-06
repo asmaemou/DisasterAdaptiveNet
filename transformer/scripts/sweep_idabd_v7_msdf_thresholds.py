@@ -10,6 +10,10 @@ Works for:
 This does NOT retrain. It only reloads the checkpoint and evaluates with:
   - different Phase-I localization thresholds
   - different damage post-processing dilation modes
+
+Patched version:
+  - loads ST-UDA/DANN checkpoints safely under PyTorch >= 2.6
+  - supports teacher/student/model state_dict key names
 """
 
 from __future__ import annotations
@@ -87,6 +91,81 @@ def make_v7_args(args):
         amp=False,
         extra_photometric_aug=False,
     )
+
+
+def load_phase2_checkpoint_safely(model: torch.nn.Module, checkpoint_path: Path, device: torch.device):
+    """
+    Loader for our own trusted ST-UDA/DANN/direct-transfer checkpoints.
+
+    PyTorch 2.6 changed torch.load default behavior to weights_only=True.
+    Some of our checkpoints contain metadata objects such as pathlib.PosixPath,
+    so for checkpoints we created ourselves we explicitly use weights_only=False.
+    """
+    checkpoint_path = Path(checkpoint_path)
+
+    try:
+        ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    except TypeError:
+        # Older PyTorch does not support weights_only.
+        ckpt = torch.load(checkpoint_path, map_location=device)
+
+    if not isinstance(ckpt, dict):
+        raise RuntimeError(f"Checkpoint is not a dict: {checkpoint_path}")
+
+    state = None
+
+    candidate_keys = [
+        "model_state_dict",
+        "state_dict",
+        "model",
+        "model_state",
+        "phase2_state_dict",
+        "phase2_model_state_dict",
+        "teacher_state_dict",
+        "teacher_model_state_dict",
+        "student_state_dict",
+        "student_model_state_dict",
+    ]
+
+    for key in candidate_keys:
+        if key in ckpt and isinstance(ckpt[key], dict):
+            state = ckpt[key]
+            print(f"Using checkpoint key: {key}", flush=True)
+            break
+
+    if state is None:
+        # Some checkpoints are saved directly as state_dicts.
+        tensor_like = len(ckpt) > 0 and all(hasattr(v, "shape") for v in ckpt.values())
+        if tensor_like:
+            state = ckpt
+            print("Using checkpoint as direct state_dict", flush=True)
+
+    if state is None:
+        print("Checkpoint keys:", sorted(list(ckpt.keys())), flush=True)
+        raise RuntimeError(
+            "Could not find model state_dict in checkpoint. "
+            "Check the printed checkpoint keys."
+        )
+
+    # Remove possible DataParallel prefix.
+    clean_state = {}
+    for k, v in state.items():
+        if k.startswith("module."):
+            clean_state[k[len("module."):]] = v
+        else:
+            clean_state[k] = v
+
+    missing, unexpected = model.load_state_dict(clean_state, strict=False)
+
+    print(f"Loaded checkpoint: {checkpoint_path}", flush=True)
+    print(f"Missing keys: {len(missing)} | Unexpected keys: {len(unexpected)}", flush=True)
+
+    if len(missing) > 0:
+        print("First missing keys:", missing[:10], flush=True)
+    if len(unexpected) > 0:
+        print("First unexpected keys:", unexpected[:10], flush=True)
+
+    return ckpt
 
 
 def main():
@@ -175,7 +254,12 @@ def main():
         window_size=args.window_size,
         num_classes=4,
     ).to(device)
-    ckpt = v7.load_model_weights(phase2_model, args.phase2_checkpoint, device)
+
+    ckpt = load_phase2_checkpoint_safely(
+        phase2_model,
+        args.phase2_checkpoint,
+        device,
+    )
     print(f"Loaded Phase-II checkpoint epoch: {ckpt.get('epoch', 'unknown')}", flush=True)
 
     results = []
