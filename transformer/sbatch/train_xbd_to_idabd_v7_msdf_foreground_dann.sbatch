@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:1
-#SBATCH --time=40:00:00
+#SBATCH --time=20:00:00
 #SBATCH --job-name=idabd_v7_dann
 #SBATCH --output=transformer/sbatch/logs/%x_%j.out
 #SBATCH --error=transformer/sbatch/logs/%x_%j.err
