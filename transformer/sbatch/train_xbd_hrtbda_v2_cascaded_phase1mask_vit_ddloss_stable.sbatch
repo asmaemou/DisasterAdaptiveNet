@@ -6,7 +6,7 @@
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:1
 #SBATCH --time=72:00:00
-#SBATCH --job-name=cleanvit_s4b3_ddloss
+#SBATCH --job-name=cleanvit_s4b3_ddloss_stable
 #SBATCH --output=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.out
 #SBATCH --error=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.err
 
@@ -17,7 +17,7 @@ PROJECT_ROOT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
 cd "$PROJECT_ROOT"
 mkdir -p transformer/sbatch/logs
 
-EXPERIMENT_NAME=train_plus_tier3_test_xbd_hrtbda_v2_cascaded_phase1mask_cleanvit_s4b3_ddloss
+EXPERIMENT_NAME=train_plus_tier3_test_xbd_hrtbda_v2_cascaded_phase1mask_cleanvit_s4b3_ddloss_stable
 OUTPUT_DIR=$PROJECT_ROOT/output/$EXPERIMENT_NAME
 XBD_ROOT=/homes/j244s673/documents/wsu/phd/xview2
 
@@ -76,7 +76,7 @@ SEESAW_P=0.8
 SEESAW_Q=2.0
 COMBO_CLASS_WEIGHTS=(0.1 0.4 0.3 0.1)
 
-SCRIPT=transformer/scripts/train_xbd_hrtbda_v2_cascaded_phase1mask_vit_ddloss.py
+SCRIPT=transformer/scripts/train_xbd_hrtbda_v2_cascaded_phase1mask_vit_ddloss_stable.py
 
 mkdir -p "$OUTPUT_DIR" "$OUTPUT_DIR/checkpoints" "$OUTPUT_DIR/scores"
 
@@ -106,7 +106,7 @@ hostname
 pwd
 which python
 python --version
-echo "MODEL: HRTBDA-CleanViT-S4B3 + DDNet-style losses"
+echo "MODEL: HRTBDA-CleanViT-S4B3 + DDNet-style losses (stable AMP-safe)"
 echo "MODE: train Phase I from scratch, train Phase II from compatible Phase I checkpoint, then test cascade"
 echo "STRICT_BACKBONE_LOAD: enabled by default"
 echo "DOMAIN_ADAPTATION: none"

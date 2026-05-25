@@ -1091,44 +1091,46 @@ class OffsetUnifiedFocalLoss(nn.Module):
     """
     DDNet-inspired Offset Unified Focal Loss for binary building localization.
 
-    Practical implementation of O-UFL:
+    Stable AMP-safe implementation:
       L = lambda * class-balanced asymmetric focal BCE
           + (1 - lambda) * focal Tversky loss
 
-    Defaults follow DDNet-style settings:
-      lambda=0.5, beta=0.9, gamma=0.3
-
-    Notes:
-      - beta > 0.5 emphasizes foreground/building recall.
-      - focal Tversky uses FN weight=beta and FP weight=(1-beta).
-      - This class returns (total, focal_component, tversky_component) so the
-        existing training loop can log it like the previous Focal+Dice loss.
+    The previous direct log(sigmoid(.)) implementation can produce NaNs under
+    fp16 autocast because values very close to 1 round to 1.0, causing
+    0 * log(0). This version uses softplus/BCE-with-logits style terms and
+    computes the loss in float32.
     """
 
-    def __init__(self, lam: float = 0.5, beta: float = 0.9, gamma: float = 0.3):
+    def __init__(self, lam: float = 0.5, beta: float = 0.9, gamma: float = 0.3, eps: float = 1e-6):
         super().__init__()
         self.lam = float(lam)
         self.beta = float(beta)
         self.gamma = float(gamma)
+        self.eps = float(eps)
 
     def forward(self, logits: torch.Tensor, target: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        target = target.float()
-        prob = torch.sigmoid(logits).clamp(1e-6, 1.0 - 1e-6)
+        # Compute loss in fp32 even when model forward uses AMP/fp16.
+        logits_f = logits.float()
+        target_f = target.float()
+        prob = torch.sigmoid(logits_f)
 
-        # Class-balanced asymmetric focal BCE. Positive/building pixels are
-        # weighted by beta; background pixels are down-weighted by p^gamma when easy.
-        pos_term = -self.beta * target * torch.log(prob)
-        neg_term = -(1.0 - self.beta) * (1.0 - target) * (prob ** self.gamma) * torch.log(1.0 - prob)
-        cfl = (pos_term + neg_term).mean()
+        # Stable forms:
+        # -log(sigmoid(x)) = softplus(-x)
+        # -log(1-sigmoid(x)) = softplus(x)
+        pos_loss = self.beta * target_f * F.softplus(-logits_f)
+        neg_loss = (1.0 - self.beta) * (1.0 - target_f) * (prob.clamp_min(self.eps) ** self.gamma) * F.softplus(logits_f)
+        cfl = (pos_loss + neg_loss).mean()
 
         dims = (1, 2)
-        tp = (prob * target).sum(dim=dims)
-        fp = (prob * (1.0 - target)).sum(dim=dims)
-        fn = ((1.0 - prob) * target).sum(dim=dims)
+        tp = (prob * target_f).sum(dim=dims)
+        fp = (prob * (1.0 - target_f)).sum(dim=dims)
+        fn = ((1.0 - prob) * target_f).sum(dim=dims)
 
-        tversky = (tp + 1e-7) / (tp + (1.0 - self.beta) * fp + self.beta * fn + 1e-7)
-        # DDNet writes the focal Tversky exponent as 1/gamma. Clamp for stability.
-        exponent = 1.0 / max(self.gamma, 1e-6)
+        denom = tp + (1.0 - self.beta) * fp + self.beta * fn + self.eps
+        tversky = (tp + self.eps) / denom
+        tversky = tversky.clamp(min=self.eps, max=1.0)
+
+        exponent = 1.0 / max(self.gamma, self.eps)
         cftl = ((1.0 - tversky).clamp_min(0.0) ** exponent).mean()
 
         total = self.lam * cfl + (1.0 - self.lam) * cftl
@@ -1139,14 +1141,14 @@ class ComboSeesawLoss(nn.Module):
     """
     DDNet-inspired damage-classification loss for foreground-only 4-class maps.
 
-    L = combo_weight * weighted Combo loss + seesaw_weight * Seesaw CE
+    Stable AMP-safe implementation:
+      L = combo_weight * weighted Combo loss + seesaw_weight * Seesaw CE
 
     Combo component:
       per-class Dice loss + focal BCE, weighted by class_weights.
 
     Seesaw component:
-      segmentation-friendly implementation of Seesaw Loss with cumulative
-      class-frequency mitigation and prediction compensation.
+      dense segmentation adaptation of Seesaw Loss with cumulative class counts.
 
     Target format:
       0=no damage, 1=minor, 2=major, 3=destroyed, 255=ignore/background.
@@ -1162,6 +1164,7 @@ class ComboSeesawLoss(nn.Module):
         seesaw_q: float = 2.0,
         ignore_index: int = 255,
         num_classes: int = 4,
+        eps: float = 1e-6,
     ):
         super().__init__()
         self.combo_alpha = float(combo_alpha)
@@ -1171,21 +1174,21 @@ class ComboSeesawLoss(nn.Module):
         self.seesaw_q = float(seesaw_q)
         self.ignore_index = int(ignore_index)
         self.num_classes = int(num_classes)
+        self.eps = float(eps)
 
         if combo_class_weights is None:
-            # DDNet-style foreground mapping: [no, minor, major, destroyed]
             combo_class_weights = torch.tensor([0.1, 0.4, 0.3, 0.1], dtype=torch.float32)
 
         combo_class_weights = combo_class_weights.float()
-        combo_class_weights = combo_class_weights / combo_class_weights.sum().clamp_min(1e-7)
+        combo_class_weights = combo_class_weights / combo_class_weights.sum().clamp_min(self.eps)
         self.register_buffer("combo_class_weights", combo_class_weights)
         self.register_buffer("cum_samples", torch.zeros(self.num_classes, dtype=torch.float32))
 
     def _flatten_valid(self, logits: torch.Tensor, target: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         valid = target != self.ignore_index
         if not valid.any():
-            return logits.new_zeros((0, logits.shape[1])), target.new_zeros((0,), dtype=torch.long)
-        logits_flat = logits.permute(0, 2, 3, 1).contiguous()[valid]
+            return logits.new_zeros((0, logits.shape[1])).float(), target.new_zeros((0,), dtype=torch.long)
+        logits_flat = logits.permute(0, 2, 3, 1).contiguous()[valid].float()
         target_flat = target[valid].long()
         return logits_flat, target_flat
 
@@ -1193,20 +1196,22 @@ class ComboSeesawLoss(nn.Module):
         if logits_flat.numel() == 0:
             return logits_flat.sum() * 0.0
 
-        probs = torch.softmax(logits_flat, dim=1).clamp(1e-6, 1.0 - 1e-6)
+        probs = torch.softmax(logits_flat, dim=1).clamp(self.eps, 1.0 - self.eps)
         one_hot = F.one_hot(target_flat, num_classes=self.num_classes).float()
 
         inter = (probs * one_hot).sum(dim=0)
         denom = (probs * probs).sum(dim=0) + (one_hot * one_hot).sum(dim=0)
-        dice_loss = 1.0 - (2.0 * inter + 1e-7) / (denom + 1e-7)
+        dice_loss = 1.0 - (2.0 * inter + self.eps) / (denom + self.eps)
+        dice_loss = dice_loss.clamp_min(0.0)
 
+        # Stable BCE on probabilities after fp32 clamp.
         bce = F.binary_cross_entropy(probs, one_hot, reduction="none")
-        pt = torch.where(one_hot > 0.5, probs, 1.0 - probs)
+        pt = torch.where(one_hot > 0.5, probs, 1.0 - probs).clamp(self.eps, 1.0 - self.eps)
         focal_bce = ((1.0 - pt) ** self.combo_alpha) * bce
         focal_bce_per_class = focal_bce.mean(dim=0)
 
         per_class_combo = dice_loss + focal_bce_per_class
-        return (self.combo_class_weights * per_class_combo).sum()
+        return (self.combo_class_weights.to(logits_flat.device) * per_class_combo).sum()
 
     def _seesaw_ce(self, logits_flat: torch.Tensor, target_flat: torch.Tensor) -> torch.Tensor:
         if logits_flat.numel() == 0:
@@ -1220,18 +1225,15 @@ class ComboSeesawLoss(nn.Module):
         cum = self.cum_samples.to(logits_flat.device).clamp_min(1.0)
         labels = target_flat.long()
 
-        # Mitigation: reduce negative pressure from frequent classes on tail-class samples.
         sample_ratio_matrix = cum[None, :] / cum[:, None]
         mitigation = torch.ones_like(sample_ratio_matrix)
         index = sample_ratio_matrix < 1.0
-        mitigation[index] = sample_ratio_matrix[index] ** self.seesaw_p
+        mitigation[index] = sample_ratio_matrix[index].clamp_min(self.eps) ** self.seesaw_p
         seesaw_weights = mitigation[labels, :]
 
-        # Compensation: if a non-target class currently has a higher predicted
-        # score than the target class, increase its penalty.
         if self.seesaw_q > 0:
-            scores = torch.softmax(logits_flat.detach(), dim=1).clamp_min(1e-6)
-            self_scores = scores[torch.arange(scores.size(0), device=scores.device), labels].unsqueeze(1)
+            scores = torch.softmax(logits_flat.detach(), dim=1).clamp_min(self.eps)
+            self_scores = scores[torch.arange(scores.size(0), device=scores.device), labels].unsqueeze(1).clamp_min(self.eps)
             score_ratio = scores / self_scores
             compensation = torch.ones_like(score_ratio)
             comp_index = score_ratio > 1.0
@@ -1239,7 +1241,7 @@ class ComboSeesawLoss(nn.Module):
             seesaw_weights = seesaw_weights * compensation
 
         seesaw_weights[torch.arange(seesaw_weights.size(0), device=logits_flat.device), labels] = 1.0
-        adjusted_logits = logits_flat + torch.log(seesaw_weights.clamp_min(1e-6))
+        adjusted_logits = logits_flat + torch.log(seesaw_weights.clamp_min(self.eps))
         return F.cross_entropy(adjusted_logits, labels, reduction="mean")
 
     def forward(self, logits: torch.Tensor, target: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -1962,11 +1964,15 @@ def train_phase1(args: argparse.Namespace, device: torch.device) -> Path:
                     logits = model(pre)
                     loss, focal, dice = criterion(logits, loc)
                     loss = args.loc_loss_weight * loss
+                    if not torch.isfinite(loss):
+                        raise RuntimeError(f"Non-finite Phase I loss at epoch {epoch}, step {step}: loss={loss.item()}, focal={focal.item()}, dice={dice.item()}")
             else:
                 with autocast(enabled=args.amp and device.type == "cuda"):
                     logits = model(pre)
                     loss, focal, dice = criterion(logits, loc)
                     loss = args.loc_loss_weight * loss
+                    if not torch.isfinite(loss):
+                        raise RuntimeError(f"Non-finite Phase I loss at epoch {epoch}, step {step}: loss={loss.item()}, focal={focal.item()}, dice={dice.item()}")
 
             backward_step(loss, model, optimizer, scaler, args)
 
@@ -2222,11 +2228,15 @@ def train_phase2(args: argparse.Namespace, device: torch.device, phase1_ckpt: Op
                     logits = model(pre, post)
                     loss, focal, dice = criterion(logits, damage_target)
                     loss = args.cls_loss_weight * loss
+                    if not torch.isfinite(loss):
+                        raise RuntimeError(f"Non-finite Phase II loss at epoch {epoch}, step {step}: loss={loss.item()}, component1={focal.item()}, component2={dice.item()}")
             else:
                 with autocast(enabled=args.amp and device.type == "cuda"):
                     logits = model(pre, post)
                     loss, focal, dice = criterion(logits, damage_target)
                     loss = args.cls_loss_weight * loss
+                    if not torch.isfinite(loss):
+                        raise RuntimeError(f"Non-finite Phase II loss at epoch {epoch}, step {step}: loss={loss.item()}, component1={focal.item()}, component2={dice.item()}")
 
             backward_step(loss, model, optimizer, scaler, args)
 
