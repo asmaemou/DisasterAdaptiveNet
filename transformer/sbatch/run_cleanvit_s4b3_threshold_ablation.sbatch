@@ -6,14 +6,15 @@
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:1
 #SBATCH --time=12:00:00
-#SBATCH --job-name=cleanvit_th_ablate
+#SBATCH --job-name=cleanvit_hold_th
 #SBATCH --output=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.out
 #SBATCH --error=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.err
 
 set -euo pipefail
 export PYTHONUNBUFFERED=1
 
-cd /homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
+PROJECT_ROOT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
+cd "$PROJECT_ROOT"
 
 mkdir -p transformer/sbatch/logs
 
@@ -36,15 +37,18 @@ conda activate disasteradaptivenet_cu128
 # =========================
 XBD_ROOT=/homes/j244s673/documents/wsu/phd/xview2
 
-EXP=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_plus_tier3_test_xbd_hrtbda_v2_cascaded_phase1mask_cleanvit_s4b3
+EXP=$PROJECT_ROOT/output/train_plus_tier3_test_xbd_hrtbda_v2_cascaded_phase1mask_cleanvit_s4b3
 
 PHASE1_ORIG=$EXP/checkpoints/phase1_best.pt
 PHASE2_BEST=$EXP/checkpoints/phase2_best.pt
 
-ABLATION_ROOT=$EXP/test_threshold_ablation
+ABLATION_ROOT=$EXP/hold_threshold_ablation
 THRESH_CKPT_DIR=$ABLATION_ROOT/threshold_checkpoints
 
 SCRIPT=transformer/scripts/train_xbd_hrtbda_v2_cascaded_phase1mask_vit_clean.py
+
+# CleanViT setup must match the original trained model.
+VIT_STAGES=stage4_b3
 
 mkdir -p "$ABLATION_ROOT" "$THRESH_CKPT_DIR"
 
@@ -55,12 +59,14 @@ pwd
 which python
 python --version
 nvidia-smi || true
+echo "MODEL: HRTBDA-CleanViT-S4B3 threshold ablation on HOLD split"
 echo "XBD_ROOT: $XBD_ROOT"
 echo "EXP: $EXP"
 echo "PHASE1_ORIG: $PHASE1_ORIG"
 echo "PHASE2_BEST: $PHASE2_BEST"
 echo "ABLATION_ROOT: $ABLATION_ROOT"
 echo "SCRIPT: $SCRIPT"
+echo "VIT_STAGES: $VIT_STAGES"
 echo "===================="
 
 if [ ! -f "$PHASE1_ORIG" ]; then
@@ -103,9 +109,9 @@ for th in thresholds:
 PY
 
 # =========================
-# TEST EACH THRESHOLD
+# TEST EACH THRESHOLD ON HOLD
 # No retraining happens here.
-# It only changes the Phase I mask threshold during cascaded testing.
+# This is only inference-time threshold selection.
 # =========================
 for TH in 0.30 0.35 0.40 0.45 0.50 0.55 0.60 0.65 0.70; do
 
@@ -116,7 +122,7 @@ for TH in 0.30 0.35 0.40 0.45 0.50 0.55 0.60 0.65 0.70; do
 
   echo
   echo "=================================================="
-  echo "Running CleanViT-S4B3 threshold ablation"
+  echo "Running CleanViT-S4B3 HOLD threshold ablation"
   echo "Threshold: $TH"
   echo "PHASE1_CKPT: $PHASE1_CKPT"
   echo "PHASE2_BEST: $PHASE2_BEST"
@@ -130,7 +136,7 @@ for TH in 0.30 0.35 0.40 0.45 0.50 0.55 0.60 0.65 0.70; do
     --xbd-root "$XBD_ROOT" \
     --train-split train tier3 \
     --val-split hold \
-    --test-split test \
+    --test-split hold \
     --output-dir "$OUTDIR" \
     --batch-size 1 \
     --num-workers 8 \
@@ -138,14 +144,16 @@ for TH in 0.30 0.35 0.40 0.45 0.50 0.55 0.60 0.65 0.70; do
     --base-channels 48 \
     --decoder-channels 128 \
     --window-size 8 \
-    --phase1-vit-stages stage4_b3 \
-    --phase2-vit-stages stage4_b3 \
+    --phase1-vit-stages "$VIT_STAGES" \
+    --phase2-vit-stages "$VIT_STAGES" \
+    --vit-mlp-ratio 4.0 \
+    --vit-dropout 0.0 \
     --amp
 
 done
 
 echo
-echo "================ THRESHOLD ABLATION SUMMARIES ================"
+echo "================ HOLD THRESHOLD ABLATION SUMMARIES ================"
 
 for f in "$ABLATION_ROOT"/th*/scores/summary_hrtbda_v2_cascaded_phase1mask.txt; do
   echo
@@ -153,5 +161,5 @@ for f in "$ABLATION_ROOT"/th*/scores/summary_hrtbda_v2_cascaded_phase1mask.txt; 
   grep -E "Phase I threshold|Localization F1|No Damage|Minor Damage|Major Damage|Destroyed|Damage F1|Overall Score" "$f" || true
 done
 
-echo "==============================================================="
+echo "===================================================================="
 echo "Done."
