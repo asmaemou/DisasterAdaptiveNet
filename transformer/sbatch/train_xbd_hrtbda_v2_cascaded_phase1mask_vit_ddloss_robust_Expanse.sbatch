@@ -14,8 +14,10 @@
 #SBATCH --no-requeue
 
 set -euo pipefail
+
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-8}"
+export PYTHONNOUSERSITE=1
 
 # =========================
 # Expanse modules
@@ -24,10 +26,6 @@ source /etc/profile.d/modules.sh
 module purge
 module load gpu
 module load slurm
-
-# Try to load Anaconda/Miniforge from modules if available.
-# If this fails, the script will still check your home folder conda installs below.
-module load anaconda3 2>/dev/null || module load miniforge3 2>/dev/null || true
 
 # =========================
 # Paths on Expanse
@@ -104,28 +102,21 @@ SCRIPT=transformer/scripts/train_xbd_hrtbda_v2_cascaded_phase1mask_vit_ddloss_ro
 mkdir -p "$OUTPUT_DIR" "$OUTPUT_DIR/checkpoints" "$OUTPUT_DIR/scores"
 
 # =========================
-# Conda activation
+# Python environment
+# Use your existing conda env Python directly.
+# This avoids the broken Expanse anaconda3 module.
 # =========================
-if [ -x "$HOME/miniforge3/bin/conda" ]; then
-  CONDA_EXE="$HOME/miniforge3/bin/conda"
-elif [ -x "$HOME/miniforge/bin/conda" ]; then
-  CONDA_EXE="$HOME/miniforge/bin/conda"
-elif [ -x "$HOME/anaconda3/bin/conda" ]; then
-  CONDA_EXE="$HOME/anaconda3/bin/conda"
-elif [ -x "$HOME/miniconda3/bin/conda" ]; then
-  CONDA_EXE="$HOME/miniconda3/bin/conda"
-elif command -v conda >/dev/null 2>&1; then
-  CONDA_EXE="$(command -v conda)"
-else
-  echo "ERROR: conda not found inside the batch job."
-  echo "Try running these interactively:"
-  echo "  module spider anaconda3"
-  echo "  module spider miniforge3"
+PYTHON_EXE=/home/amouradi/.conda/envs/disasteradaptivenet_cu128/bin/python
+
+if [ ! -x "$PYTHON_EXE" ]; then
+  echo "ERROR: Python env not found at: $PYTHON_EXE"
+  echo "Run this interactively:"
+  echo "  which python"
+  echo "Then update PYTHON_EXE in this sbatch file."
   exit 1
 fi
 
-eval "$("$CONDA_EXE" shell.bash hook)"
-conda activate disasteradaptivenet_cu128
+export PATH="/home/amouradi/.conda/envs/disasteradaptivenet_cu128/bin:$PATH"
 
 # =========================
 # Sanity checks
@@ -139,7 +130,7 @@ if [ ! -f "$SCRIPT" ]; then
   echo "ERROR: Python script not found: $SCRIPT"
   echo "Current directory:"
   pwd
-  echo "Available scripts:"
+  echo "Available transformer/scripts files:"
   ls -lh transformer/scripts || true
   exit 1
 fi
@@ -158,9 +149,9 @@ echo "SLURM_JOB_ID: ${SLURM_JOB_ID:-NA}"
 echo "SLURM_JOB_NODELIST: ${SLURM_JOB_NODELIST:-NA}"
 echo "SLURM_CPUS_PER_TASK: ${SLURM_CPUS_PER_TASK:-NA}"
 echo "CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-NA}"
-which python
-python --version
-echo "CONDA_PREFIX: ${CONDA_PREFIX:-NA}"
+echo "PYTHON_EXE: $PYTHON_EXE"
+which python || true
+"$PYTHON_EXE" --version
 echo "MODEL: HRTBDA-CleanViT-S4B3 + DDNet-style losses"
 echo "MODE: train Phase I from scratch, train Phase II from compatible Phase I checkpoint, then test cascade"
 echo "STRICT_BACKBONE_LOAD: enabled by default"
@@ -202,7 +193,7 @@ nvidia-smi || true
 echo "===================="
 
 CMD=(
-  python -u "$SCRIPT"
+  "$PYTHON_EXE" -u "$SCRIPT"
   --phase both
   --xbd-root "$XBD_ROOT"
   --train-split "${TRAIN_SPLITS[@]}"
