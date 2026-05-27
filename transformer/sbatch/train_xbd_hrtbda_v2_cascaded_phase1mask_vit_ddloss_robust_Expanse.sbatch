@@ -30,7 +30,7 @@ module load slurm
 # =========================
 # Paths on Expanse
 # =========================
-PROJECT_ROOT=/home/amouradi/expanse/DisasterAdaptiveNet
+PROJECT_ROOT=/home/amouradi/expanse/expanse/DisasterAdaptiveNet
 cd "$PROJECT_ROOT"
 
 mkdir -p transformer/sbatch/logs
@@ -40,8 +40,7 @@ OUTPUT_DIR=$PROJECT_ROOT/output/$EXPERIMENT_NAME
 
 # IMPORTANT:
 # Change this if your xView2/xBD dataset is somewhere else.
-XBD_ROOT=/home/amouradi/expanse/xview2
-
+XBD_ROOT=/home/amouradi/expanse/expanse/xview2
 TRAIN_SPLITS=(train tier3)
 VAL_SPLIT=hold
 TEST_SPLIT=test
