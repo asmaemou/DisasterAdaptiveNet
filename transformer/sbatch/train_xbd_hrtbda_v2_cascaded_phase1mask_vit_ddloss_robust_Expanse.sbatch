@@ -8,8 +8,8 @@
 #SBATCH --mem=64G
 #SBATCH --gpus=1
 #SBATCH --time=48:00:00
-#SBATCH --output=/home/amouradi/expanse/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.out
-#SBATCH --error=/home/amouradi/expanse/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.err
+#SBATCH --output=/home/amouradi/expanse/expanse/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.out
+#SBATCH --error=/home/amouradi/expanse/expanse/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.err
 #SBATCH --export=ALL
 #SBATCH --no-requeue
 
