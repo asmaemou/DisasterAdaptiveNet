@@ -96,8 +96,7 @@ SEESAW_P=0.8
 SEESAW_Q=2.0
 COMBO_CLASS_WEIGHTS=(0.1 0.4 0.3 0.1)
 
-SCRIPT=transformer/scripts/train_xbd_hrtbda_v2_cascaded_phase1mask_vit_ddloss_robust.py
-
+SCRIPT=$PROJECT_ROOT/transformer/scripts/train_xbd_hrtbda_v2_cascaded_phase1mask_vit_ddloss_robust.py
 mkdir -p "$OUTPUT_DIR" "$OUTPUT_DIR/checkpoints" "$OUTPUT_DIR/scores"
 
 # =========================
@@ -130,7 +129,7 @@ if [ ! -f "$SCRIPT" ]; then
   echo "Current directory:"
   pwd
   echo "Available transformer/scripts files:"
-  ls -lh transformer/scripts || true
+  ls -lh "$PROJECT_ROOT/transformer/scripts" || true
   exit 1
 fi
 
