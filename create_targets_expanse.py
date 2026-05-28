@@ -82,8 +82,10 @@ if __name__ == '__main__':
         if '_pre_disaster.png' in f.name:
             all_files.append(dataset_dir / 'tier3' / 'labels' / f'{f.stem}.json')
 
-    with Pool() as pool:
-        _ = pool.map(process_image, all_files)
+    for i, f in enumerate(all_files, 1):
+        process_image(f)
+        if i % 100 == 0:
+            print(f"Processed {i}/{len(all_files)}")
 
     elapsed = timeit.default_timer() - t0
     print('Time: {:.3f} min'.format(elapsed / 60))
