@@ -8,8 +8,8 @@
 #SBATCH --mem=64G
 #SBATCH --gpus=1
 #SBATCH --time=48:00:00
-#SBATCH --output=/home/amouradi/expanse/expanse/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.out
-#SBATCH --error=/home/amouradi/expanse/expanse/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.err
+#SBATCH --output=/home/amouradi/expanse/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.out
+#SBATCH --error=/home/amouradi/expanse/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.err
 #SBATCH --export=ALL
 #SBATCH --no-requeue
 
@@ -30,17 +30,16 @@ module load slurm
 # =========================
 # Paths on Expanse
 # =========================
-PROJECT_ROOT=/home/amouradi/expanse/expanse/DisasterAdaptiveNet
+PROJECT_ROOT=/home/amouradi/expanse/DisasterAdaptiveNet
+XBD_ROOT=/home/amouradi/expanse/xview2
+
 cd "$PROJECT_ROOT"
 
-mkdir -p transformer/sbatch/logs
+mkdir -p "$PROJECT_ROOT/transformer/sbatch/logs"
 
 EXPERIMENT_NAME=train_plus_tier3_test_xbd_hrtbda_v2_cascaded_phase1mask_cleanvit_s4b3_ddloss_robust
 OUTPUT_DIR=$PROJECT_ROOT/output/$EXPERIMENT_NAME
 
-# IMPORTANT:
-# Change this if your xView2/xBD dataset is somewhere else.
-XBD_ROOT=/home/amouradi/expanse/expanse/xview2
 TRAIN_SPLITS=(train tier3)
 VAL_SPLIT=hold
 TEST_SPLIT=test
@@ -71,7 +70,6 @@ MAX_GRAD_NORM=0.5
 SAVE_EVERY=1
 EARLY_STOPPING_PATIENCE=999
 
-# Existing fallback focal/dice params remain available, but this job uses DDNet-style losses.
 FOCAL_GAMMA=2.0
 LOC_LOSS_WEIGHT=1.0
 CLS_LOSS_WEIGHT=1.0
@@ -82,13 +80,10 @@ CLS_LOSS_WEIGHT=1.0
 PHASE1_LOSS=unified_focal
 PHASE2_LOSS=combo_seesaw
 
-# Phase I Offset Unified Focal Loss / O-UFL defaults inspired by DDNet.
 OUFL_LAMBDA=0.5
 OUFL_BETA=0.9
 OUFL_GAMMA=0.3
 
-# Phase II Combo + Seesaw defaults.
-# Combo:Seesaw = 1:2, alpha=2.0, class weights=[no, minor, major, destroyed]
 COMBO_ALPHA=2.0
 COMBO_LOSS_WEIGHT=1.0
 SEESAW_LOSS_WEIGHT=2.0
@@ -97,20 +92,18 @@ SEESAW_Q=2.0
 COMBO_CLASS_WEIGHTS=(0.1 0.4 0.3 0.1)
 
 SCRIPT=$PROJECT_ROOT/transformer/scripts/train_xbd_hrtbda_v2_cascaded_phase1mask_vit_ddloss_robust.py
+
 mkdir -p "$OUTPUT_DIR" "$OUTPUT_DIR/checkpoints" "$OUTPUT_DIR/scores"
 
 # =========================
 # Python environment
-# Use your existing conda env Python directly.
-# This avoids the broken Expanse anaconda3 module.
 # =========================
 PYTHON_EXE=/home/amouradi/.conda/envs/disasteradaptivenet_cu128/bin/python
 
 if [ ! -x "$PYTHON_EXE" ]; then
   echo "ERROR: Python env not found at: $PYTHON_EXE"
-  echo "Run this interactively:"
-  echo "  which python"
-  echo "Then update PYTHON_EXE in this sbatch file."
+  echo "Check your env with:"
+  echo "  ls -lh /home/amouradi/.conda/envs/disasteradaptivenet_cu128/bin/python"
   exit 1
 fi
 
@@ -126,9 +119,7 @@ fi
 
 if [ ! -f "$SCRIPT" ]; then
   echo "ERROR: Python script not found: $SCRIPT"
-  echo "Current directory:"
-  pwd
-  echo "Available transformer/scripts files:"
+  echo "Available files under scripts:"
   ls -lh "$PROJECT_ROOT/transformer/scripts" || true
   exit 1
 fi
@@ -152,13 +143,13 @@ which python || true
 "$PYTHON_EXE" --version
 echo "MODEL: HRTBDA-CleanViT-S4B3 + DDNet-style losses"
 echo "MODE: train Phase I from scratch, train Phase II from compatible Phase I checkpoint, then test cascade"
-echo "STRICT_BACKBONE_LOAD: enabled by default"
-echo "DOMAIN_ADAPTATION: none"
+echo "PROJECT_ROOT: $PROJECT_ROOT"
 echo "XBD_ROOT: $XBD_ROOT"
+echo "SCRIPT: $SCRIPT"
+echo "OUTPUT_DIR: $OUTPUT_DIR"
 echo "TRAIN_SPLITS: ${TRAIN_SPLITS[*]}"
 echo "VAL_SPLIT: $VAL_SPLIT"
 echo "TEST_SPLIT: $TEST_SPLIT"
-echo "OUTPUT_DIR: $OUTPUT_DIR"
 echo "PHASE1_EPOCHS: $PHASE1_EPOCHS"
 echo "PHASE2_EPOCHS: $PHASE2_EPOCHS"
 echo "WARMUP_EPOCHS: $WARMUP_EPOCHS"
