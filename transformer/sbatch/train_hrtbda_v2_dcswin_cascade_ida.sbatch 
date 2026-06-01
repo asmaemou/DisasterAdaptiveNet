@@ -26,7 +26,7 @@ PHASE1_BEST=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_p
 OUTPUT_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/HRTBDA-v2-DCSwin-Cascade_IDA
 
 TRAIN_SPLITS=(train)
-VAL_SPLIT=hold
+VAL_SPLIT=val
 TEST_SPLIT=test
 
 PHASE2_EPOCHS=30
