@@ -4,15 +4,15 @@ src = Path("transformer/scripts/train_xbd_hrtbda_v5_multilabel_crop_cascade.py")
 dst = Path("transformer/scripts/train_idabd_hrtbda_v5_phase2_finetune.py")
 
 if not src.exists():
-    raise FileNotFoundError(f"Missing source script: {src}")
+    raise FileNotFoundError(f"Missing source v5 script: {src}")
 
 text = src.read_text()
 
-# Add CLI argument if not already present.
+# Add CLI argument
 if "--init-phase2-from" not in text:
     marker = "    return parser.parse_args()"
     if marker not in text:
-        raise RuntimeError("Could not find parser return marker in v5 script.")
+        raise RuntimeError("Could not find parser return marker.")
 
     insert_arg = '''
     parser.add_argument(
@@ -25,7 +25,7 @@ if "--init-phase2-from" not in text:
 '''
     text = text.replace(marker, insert_arg + marker)
 
-# Add flexible loader if not already present.
+# Add flexible Phase-II checkpoint loader
 if "def load_phase2_init_weights_flexible" not in text:
     helper = r'''
 def load_phase2_init_weights_flexible(model: nn.Module, checkpoint_path: Path, device: torch.device) -> None:
@@ -87,9 +87,10 @@ def load_phase2_init_weights_flexible(model: nn.Module, checkpoint_path: Path, d
         idx = text.find("\ndef train_phase2")
     if idx == -1:
         raise RuntimeError("Could not find insertion point before train_phase2.")
+
     text = text[:idx] + helper + text[idx:]
 
-# Insert initialization inside train_phase2 before DataParallel.
+# Insert initialization inside train_phase2 before DataParallel
 if "Applying external Phase-II initialization before fine-tuning" not in text:
     train_idx = text.find("def train_phase2")
     if train_idx == -1:
@@ -112,4 +113,4 @@ if "Applying external Phase-II initialization before fine-tuning" not in text:
     text = text[:dp_idx] + insert_init + text[dp_idx:]
 
 dst.write_text(text)
-print(f"Wrote patched script: {dst}")
+print(f"Wrote real fine-tuning script: {dst}")
