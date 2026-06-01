@@ -91,7 +91,7 @@ for TH in 0.40 0.45 0.50 0.55; do
       --xbd-root "$XBD_ROOT" \
       --train-split train tier3 \
       --val-split hold \
-      --test-split hold \
+      --test-split test \
       --output-dir "$OUTDIR" \
       --batch-size 2 \
       --eval-batch-size 1 \
