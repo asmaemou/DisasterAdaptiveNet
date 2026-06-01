@@ -18,7 +18,7 @@ mkdir -p transformer/sbatch/logs
 
 EXPERIMENT_NAME=HRTBDA-v2-DCSwin-Cascade_IDA
 
-IDA_XBD_ROOT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/data/ida_xbd_format_80_10_10
+IDA_XBD_ROOT=/homes/j244s673/documents/wsu/phd/idabd_real_disasteradaptivenet
 
 # Use the best selected Phase-I model from your v5 final-test setting.
 PHASE1_BEST=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_plus_tier3_test_xbd_hrtbda_v5_FINAL_TEST_th040_dilminor/threshold_checkpoints/phase1_best_threshold_0.40.pt
