@@ -17,14 +17,12 @@ PROJECT_ROOT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
 cd "$PROJECT_ROOT"
 mkdir -p transformer/sbatch/logs
 
-EXPERIMENT_NAME=HRTBDA-v5-xBDInit-FullFineTune_IDA
+EXPERIMENT_NAME=HRTBDA-v5-xBDInit-FullFineTune_IDA_resetbest
 
 IDABD_ROOT=/homes/j244s673/documents/wsu/phd/idabd_real_disasteradaptivenet
 
-# xBD-trained Phase-I checkpoint selected with threshold 0.40
 XBD_PHASE1_CKPT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_plus_tier3_test_xbd_hrtbda_v5_FINAL_TEST_th040_dilminor/threshold_checkpoints/phase1_best_threshold_0.40.pt
 
-# xBD-trained Phase-II checkpoint
 XBD_PHASE2_CKPT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_plus_tier3_test_xbd_hrtbda_v5_multilabel_crop_cascade/checkpoints/phase2_best.pt
 
 OUTPUT_DIR=$PROJECT_ROOT/output/$EXPERIMENT_NAME
@@ -33,8 +31,7 @@ TRAIN_SPLITS=(train)
 VAL_SPLIT=val
 TEST_SPLIT=test
 
-# Because IDA-BD is small, fine-tune Phase I with fewer epochs and smaller LR.
-PHASE1_EPOCHS=60
+PHASE1_EPOCHS=150
 PHASE2_EPOCHS=30
 
 BATCH_SIZE=2
@@ -98,8 +95,6 @@ echo "PHASE1_EPOCHS: $PHASE1_EPOCHS"
 echo "PHASE2_EPOCHS: $PHASE2_EPOCHS"
 echo "PHASE1_LR: $PHASE1_LR"
 echo "PHASE2_LR: $PHASE2_LR"
-echo "POSTPROCESS_DILATION: $POSTPROCESS_DILATION"
-echo "DILATION_KERNEL: $DILATION_KERNEL"
 echo "======================================================="
 
 if [ ! -f "$XBD_PHASE1_CKPT" ]; then
@@ -120,25 +115,60 @@ if [ ! -d "$IDABD_ROOT/train/images" ]; then
   exit 1
 fi
 
-if [ ! -d "$IDABD_ROOT/train/targets" ]; then
-  echo "ERROR: missing IDA-BD train targets:"
-  echo "$IDABD_ROOT/train/targets"
-  exit 1
-fi
-
 echo "===== CHECK IDA-BD FORMAT ====="
 python -u transformer/scripts/check_idabd_xbd_format.py \
   --root "$IDABD_ROOT" \
   --splits train val test
 
+echo "===== CREATE RESET-BEST PHASE-I CHECKPOINT ====="
+XBD_PHASE1_RESET_CKPT=$OUTPUT_DIR/checkpoints/phase1_xbdinit_resetbest_for_ida.pt
+
+python - <<PY
+import torch
+from pathlib import Path
+
+src = Path("$XBD_PHASE1_CKPT")
+dst = Path("$XBD_PHASE1_RESET_CKPT")
+dst.parent.mkdir(parents=True, exist_ok=True)
+
+try:
+    ckpt = torch.load(src, map_location="cpu", weights_only=False)
+except TypeError:
+    ckpt = torch.load(src, map_location="cpu")
+
+# Keep the pretrained xBD weights, but reset validation bookkeeping.
+ckpt["epoch"] = 0
+ckpt["best_metric"] = -1.0
+ckpt["best_score"] = -1.0
+ckpt["best_f1"] = -1.0
+ckpt["best_loc_f1"] = -1.0
+ckpt["best_threshold"] = 0.40
+
+# Remove optimizer/scheduler states so this behaves like fine-tuning initialization.
+for k in [
+    "optimizer",
+    "optimizer_state_dict",
+    "scheduler",
+    "scheduler_state_dict",
+    "scaler",
+    "amp_scaler",
+]:
+    ckpt.pop(k, None)
+
+torch.save(ckpt, dst)
+print(f"Wrote reset-best Phase-I checkpoint: {dst}")
+print("best_metric:", ckpt.get("best_metric"))
+print("best_threshold:", ckpt.get("best_threshold"))
+PY
+
 echo
 echo "======================================================="
-echo "STEP 1: FINE-TUNE PHASE I ON IDA-BD FROM xBD PHASE-I"
+echo "STEP 1: xBD Phase-I weights -> fine-tune Phase I on IDA-BD"
 echo "======================================================="
 
 python -u transformer/scripts/train_xbd_hrtbda_v5_multilabel_crop_cascade.py \
   --phase phase1 \
-  --resume-phase1 "$XBD_PHASE1_CKPT" \
+  --resume-phase1 "$XBD_PHASE1_RESET_CKPT" \
   --xbd-root "$IDABD_ROOT" \
   --train-split "${TRAIN_SPLITS[@]}" \
   --val-split "$VAL_SPLIT" \
@@ -164,19 +194,18 @@ python -u transformer/scripts/train_xbd_hrtbda_v5_multilabel_crop_cascade.py \
 IDA_PHASE1_CKPT=$OUTPUT_DIR/checkpoints/phase1_best.pt
 
 if [ ! -f "$IDA_PHASE1_CKPT" ]; then
-  echo "ERROR: expected fine-tuned IDA Phase-I checkpoint not found:"
+  echo "ERROR: expected IDA fine-tuned Phase-I checkpoint not found:"
   echo "$IDA_PHASE1_CKPT"
   exit 1
 fi
 
-echo
 echo "Fine-tuned IDA Phase-I checkpoint:"
 ls -lh "$IDA_PHASE1_CKPT"
 
 echo
 echo "======================================================="
-echo "STEP 2: FINE-TUNE PHASE II ON IDA-BD FROM xBD PHASE-II"
-echo "        USING THE NEW IDA-FINETUNED PHASE-I MASK"
+echo "STEP 2: xBD Phase-II weights -> fine-tune Phase II on IDA-BD"
+echo "Using the newly fine-tuned IDA Phase-I checkpoint"
 echo "======================================================="
 
 python -u transformer/scripts/train_idabd_hrtbda_v5_phase2_finetune.py \
