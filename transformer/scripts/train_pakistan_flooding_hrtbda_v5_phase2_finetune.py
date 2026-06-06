@@ -1,4 +1,3 @@
-cat > transformer/scripts/train_pakistan_flooding_hrtbda_v5_phase2_finetune.py <<'PY'
 #!/usr/bin/env python3
 """
 HRTBDA v5 Phase-II fine-tuning on Pakistan Flooding.
