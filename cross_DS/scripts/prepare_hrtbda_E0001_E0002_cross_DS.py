@@ -9,6 +9,24 @@ from pathlib import Path
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff"}
 
 
+DATASET_ALIASES = {
+    "EARTHQUAKE-TURKEY": [
+        "earthquake_turkey_preprocessed",
+        "EARTHQUAKE-TURKEY",
+    ],
+    "HURRICANE-DELTA": [
+        "hurricane_delta_preprocessed",
+        "HURRICANE-DELTA",
+    ],
+    "HURRICANE-IAN": [
+        "hurrican-ian",
+        "hurricane_ian_preprocessed",
+        "hurricane-ian_preprocessed",
+        "HURRICANE-IAN",
+    ],
+}
+
+
 def sanitize_prefix(name: str) -> str:
     return name.replace("/", "_").replace(" ", "_")
 
@@ -21,6 +39,47 @@ def find_dir(root: Path, split: str, candidates):
 
     raise FileNotFoundError(
         f"Could not find any of {candidates} under {root / split}"
+    )
+
+
+def resolve_dataset_root(dataset_base: Path, dataset_name: str) -> Path:
+    dataset_name = dataset_name.strip()
+
+    direct = Path(dataset_name)
+    if direct.is_absolute() and direct.exists():
+        return direct
+
+    candidates = []
+
+    if dataset_name in DATASET_ALIASES:
+        candidates.extend(DATASET_ALIASES[dataset_name])
+
+    candidates.extend(
+        [
+            dataset_name,
+            dataset_name.lower(),
+            dataset_name.lower().replace("-", "_"),
+            dataset_name.lower().replace("-", "_") + "_preprocessed",
+            dataset_name.lower().replace("-", "-") + "_preprocessed",
+        ]
+    )
+
+    seen = set()
+    unique_candidates = []
+    for c in candidates:
+        if c not in seen:
+            unique_candidates.append(c)
+            seen.add(c)
+
+    for c in unique_candidates:
+        p = dataset_base / c
+        if p.exists() and p.is_dir():
+            print(f"Resolved {dataset_name} -> {p}")
+            return p
+
+    raise FileNotFoundError(
+        f"Could not resolve dataset '{dataset_name}' under {dataset_base}\n"
+        f"Tried candidates: {unique_candidates}"
     )
 
 
@@ -87,36 +146,11 @@ def main():
         description="Prepare combined cross-dataset xBD-style root for HRTBDA."
     )
 
-    parser.add_argument(
-        "--dataset-base",
-        required=True,
-        help="Base folder containing disaster dataset folders.",
-    )
-
-    parser.add_argument(
-        "--train-datasets",
-        required=True,
-        help="Comma-separated training datasets, e.g. EARTHQUAKE-TURKEY,HURRICANE-DELTA",
-    )
-
-    parser.add_argument(
-        "--test-dataset",
-        required=True,
-        help="Target test dataset, e.g. HURRICANE-IAN",
-    )
-
-    parser.add_argument(
-        "--output-root",
-        required=True,
-        help="Output combined xBD-style dataset root.",
-    )
-
-    parser.add_argument(
-        "--mode",
-        choices=["symlink", "copy"],
-        default="symlink",
-        help="Use symlink to save space or copy files physically.",
-    )
+    parser.add_argument("--dataset-base", required=True)
+    parser.add_argument("--train-datasets", required=True)
+    parser.add_argument("--test-dataset", required=True)
+    parser.add_argument("--output-root", required=True)
+    parser.add_argument("--mode", choices=["symlink", "copy"], default="symlink")
 
     args = parser.parse_args()
 
@@ -136,15 +170,17 @@ def main():
     print("Mode:", args.mode)
     print("====================================================")
 
+    if not dataset_base.exists():
+        raise FileNotFoundError(f"Dataset base does not exist: {dataset_base}")
+
     for split in ["train", "val", "test"]:
         reset_dir(output_root / split / "images")
         reset_dir(output_root / split / "targets")
 
     manifest_rows = []
 
-    # Train and validation come from Dataset A + Dataset B
     for dataset in train_datasets:
-        dataset_root = dataset_base / dataset
+        dataset_root = resolve_dataset_root(dataset_base, dataset)
         prefix = sanitize_prefix(dataset)
 
         for split in ["train", "val"]:
@@ -152,64 +188,63 @@ def main():
             target_dir = find_dir(dataset_root, split, ["targets", "masks", "labels"])
 
             n_images = transfer_folder(
-                src_dir=image_dir,
-                dst_dir=output_root / split / "images",
-                prefix=prefix,
-                mode=args.mode,
-                manifest_rows=manifest_rows,
-                split=split,
-                dataset=dataset,
-                kind="image",
+                image_dir,
+                output_root / split / "images",
+                prefix,
+                args.mode,
+                manifest_rows,
+                split,
+                dataset,
+                "image",
             )
 
             n_targets = transfer_folder(
-                src_dir=target_dir,
-                dst_dir=output_root / split / "targets",
-                prefix=prefix,
-                mode=args.mode,
-                manifest_rows=manifest_rows,
-                split=split,
-                dataset=dataset,
-                kind="target",
+                target_dir,
+                output_root / split / "targets",
+                prefix,
+                args.mode,
+                manifest_rows,
+                split,
+                dataset,
+                "target",
             )
 
             print(
                 f"{split:5s} | {dataset:25s} | "
-                f"images={n_images:6d} | targets={n_targets:6d}"
+                f"source={dataset_root} | images={n_images:6d} | targets={n_targets:6d}"
             )
 
-    # Test comes only from Dataset C
-    dataset_root = dataset_base / test_dataset
+    dataset_root = resolve_dataset_root(dataset_base, test_dataset)
     prefix = sanitize_prefix(test_dataset)
 
     image_dir = find_dir(dataset_root, "test", ["images"])
     target_dir = find_dir(dataset_root, "test", ["targets", "masks", "labels"])
 
     n_images = transfer_folder(
-        src_dir=image_dir,
-        dst_dir=output_root / "test" / "images",
-        prefix=prefix,
-        mode=args.mode,
-        manifest_rows=manifest_rows,
-        split="test",
-        dataset=test_dataset,
-        kind="image",
+        image_dir,
+        output_root / "test" / "images",
+        prefix,
+        args.mode,
+        manifest_rows,
+        "test",
+        test_dataset,
+        "image",
     )
 
     n_targets = transfer_folder(
-        src_dir=target_dir,
-        dst_dir=output_root / "test" / "targets",
-        prefix=prefix,
-        mode=args.mode,
-        manifest_rows=manifest_rows,
-        split="test",
-        dataset=test_dataset,
-        kind="target",
+        target_dir,
+        output_root / "test" / "targets",
+        prefix,
+        args.mode,
+        manifest_rows,
+        "test",
+        test_dataset,
+        "target",
     )
 
     print(
         f"{'test':5s} | {test_dataset:25s} | "
-        f"images={n_images:6d} | targets={n_targets:6d}"
+        f"source={dataset_root} | images={n_images:6d} | targets={n_targets:6d}"
     )
 
     manifest_path = output_root / "manifest.csv"

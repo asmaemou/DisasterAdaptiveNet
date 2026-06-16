@@ -14,7 +14,7 @@ set -euo pipefail
 export PYTHONUNBUFFERED=1
 
 PROJECT_ROOT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
-DATASET_BASE=/homes/j244s673/documents/wsu/phd/dataset
+DATASET_BASE=/homes/j244s673/documents/wsu/phd
 
 cd "$PROJECT_ROOT"
 mkdir -p cross_DS/sbatch/logs
@@ -98,36 +98,7 @@ echo "TEST_DATASET: $TEST_DATASET"
 echo "DATASET_BASE: $DATASET_BASE"
 echo "COMBINED_ROOT: $COMBINED_ROOT"
 echo "OUTPUT_DIR: $OUTPUT_DIR"
-echo "PREP_SCRIPT: $PREP_SCRIPT"
-echo "HRTBDA_SCRIPT: $HRTBDA_SCRIPT"
-echo "PHASE2_WRAPPER: $PHASE2_WRAPPER"
-echo "XBD_PHASE1_CKPT: $XBD_PHASE1_CKPT"
-echo "XBD_PHASE2_CKPT: $XBD_PHASE2_CKPT"
 echo "==============================================================="
-
-if [ ! -d "$DATASET_BASE" ]; then
-  echo "ERROR: DATASET_BASE does not exist:"
-  echo "$DATASET_BASE"
-  exit 1
-fi
-
-if [ ! -f "$PREP_SCRIPT" ]; then
-  echo "ERROR: missing prepare script:"
-  echo "$PREP_SCRIPT"
-  exit 1
-fi
-
-if [ ! -f "$HRTBDA_SCRIPT" ]; then
-  echo "ERROR: missing HRTBDA script:"
-  echo "$HRTBDA_SCRIPT"
-  exit 1
-fi
-
-if [ ! -f "$PHASE2_WRAPPER" ]; then
-  echo "ERROR: missing Phase-II wrapper:"
-  echo "$PHASE2_WRAPPER"
-  exit 1
-fi
 
 if [ ! -f "$XBD_PHASE1_CKPT" ]; then
   echo "ERROR: missing xBD Phase-I checkpoint:"
@@ -141,7 +112,6 @@ if [ ! -f "$XBD_PHASE2_CKPT" ]; then
   exit 1
 fi
 
-echo "===== PREPARE COMBINED DATASET ====="
 python -u "$PREP_SCRIPT" \
   --dataset-base "$DATASET_BASE" \
   --train-datasets "$TRAIN_DATASETS" \
@@ -155,6 +125,7 @@ python -u transformer/scripts/check_idabd_xbd_format.py \
   --splits train val test
 
 echo "===== CREATE RESET-BEST PHASE-I CHECKPOINT ====="
+
 XBD_PHASE1_RESET_CKPT=$OUTPUT_DIR/checkpoints/phase1_xbdinit_resetbest_for_E0002.pt
 
 python - <<PY
@@ -170,7 +141,6 @@ try:
 except TypeError:
     ckpt = torch.load(src, map_location="cpu")
 
-# Keep xBD pretrained weights, but reset old xBD validation bookkeeping.
 ckpt["epoch"] = 0
 ckpt["best_metric"] = -1.0
 ckpt["best_score"] = -1.0
@@ -190,16 +160,9 @@ for k in [
 
 torch.save(ckpt, dst)
 print(f"Wrote reset-best Phase-I checkpoint: {dst}")
-print("best_metric:", ckpt.get("best_metric"))
-print("best_threshold:", ckpt.get("best_threshold"))
 PY
 
-echo
-echo "==============================================================="
-echo "STEP 1: xBD Phase-I weights -> fine-tune Phase I"
-echo "Train: EARTHQUAKE-TURKEY + HURRICANE-DELTA"
-echo "Validation: combined val split"
-echo "==============================================================="
+echo "===== STEP 1: xBD Phase-I weights -> fine-tune Phase I ====="
 
 python -u "$HRTBDA_SCRIPT" \
   --phase phase1 \
@@ -234,14 +197,7 @@ if [ ! -f "$PHASE1_CKPT" ]; then
   exit 1
 fi
 
-echo "Fine-tuned Phase-I checkpoint:"
-ls -lh "$PHASE1_CKPT"
-
-echo
-echo "==============================================================="
-echo "STEP 2: xBD Phase-II weights -> fine-tune Phase II"
-echo "Test: HURRICANE-IAN"
-echo "==============================================================="
+echo "===== STEP 2: xBD Phase-II weights -> fine-tune Phase II and test on HURRICANE-IAN ====="
 
 python -u "$PHASE2_WRAPPER" \
   --phase phase2_test \

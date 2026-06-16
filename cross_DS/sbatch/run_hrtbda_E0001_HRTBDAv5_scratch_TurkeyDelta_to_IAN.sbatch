@@ -14,7 +14,7 @@ set -euo pipefail
 export PYTHONUNBUFFERED=1
 
 PROJECT_ROOT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
-DATASET_BASE=/homes/j244s673/documents/wsu/phd/dataset
+DATASET_BASE=/homes/j244s673/documents/wsu/phd
 
 cd "$PROJECT_ROOT"
 mkdir -p cross_DS/sbatch/logs
@@ -94,29 +94,8 @@ echo "TEST_DATASET: $TEST_DATASET"
 echo "DATASET_BASE: $DATASET_BASE"
 echo "COMBINED_ROOT: $COMBINED_ROOT"
 echo "OUTPUT_DIR: $OUTPUT_DIR"
-echo "PREP_SCRIPT: $PREP_SCRIPT"
-echo "HRTBDA_SCRIPT: $HRTBDA_SCRIPT"
 echo "======================================================="
 
-if [ ! -d "$DATASET_BASE" ]; then
-  echo "ERROR: DATASET_BASE does not exist:"
-  echo "$DATASET_BASE"
-  exit 1
-fi
-
-if [ ! -f "$PREP_SCRIPT" ]; then
-  echo "ERROR: missing prepare script:"
-  echo "$PREP_SCRIPT"
-  exit 1
-fi
-
-if [ ! -f "$HRTBDA_SCRIPT" ]; then
-  echo "ERROR: missing HRTBDA script:"
-  echo "$HRTBDA_SCRIPT"
-  exit 1
-fi
-
-echo "===== PREPARE COMBINED DATASET ====="
 python -u "$PREP_SCRIPT" \
   --dataset-base "$DATASET_BASE" \
   --train-datasets "$TRAIN_DATASETS" \
@@ -129,10 +108,7 @@ python -u transformer/scripts/check_idabd_xbd_format.py \
   --root "$COMBINED_ROOT" \
   --splits train val test
 
-echo
-echo "======================================================="
-echo "STEP 1: Train HRTBDA-v5 Phase I from scratch"
-echo "======================================================="
+echo "===== STEP 1: Train HRTBDA-v5 Phase I from scratch ====="
 
 python -u "$HRTBDA_SCRIPT" \
   --phase phase1 \
@@ -166,13 +142,7 @@ if [ ! -f "$PHASE1_CKPT" ]; then
   exit 1
 fi
 
-echo "Phase-I checkpoint:"
-ls -lh "$PHASE1_CKPT"
-
-echo
-echo "======================================================="
-echo "STEP 2: Train HRTBDA-v5 Phase II from scratch and test on HURRICANE-IAN"
-echo "======================================================="
+echo "===== STEP 2: Train HRTBDA-v5 Phase II from scratch and test on HURRICANE-IAN ====="
 
 python -u "$HRTBDA_SCRIPT" \
   --phase phase2_test \
