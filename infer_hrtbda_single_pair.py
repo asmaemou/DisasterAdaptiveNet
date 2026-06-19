@@ -1,4 +1,50 @@
 #!/usr/bin/env python3
+"""
+Single-pair inference wrapper for DisasterAdaptiveNet HRTBDA cascade.
+
+This version supports the correct two-stage setup:
+
+  Phase I:
+    pre image -> building/localization logits -> building mask
+
+  Phase II:
+    pre/post image -> 4 foreground damage logits:
+      0 = no damage
+      1 = minor
+      2 = major
+      3 = destroyed
+
+  Final dashboard mask:
+    0 outside Phase I building mask
+    1 no damage
+    2 minor
+    3 major
+    4 destroyed
+
+The backend can still call this script using the existing standardized CLI:
+  --checkpoint ...
+  --pre_image ...
+  --post_image ...
+  --gt_mask ...
+  --building_mask_output ...
+  --damage_mask_output ...
+  --damage_index_output ...
+  --overlay_output ...
+  --summary_json ...
+  --summary_csv ...
+
+Extra cascade paths are read from environment variables:
+  HRTBDA_PHASE1_CHECKPOINT
+  HRTBDA_PHASE2_CHECKPOINT
+  HRTBDA_PHASE1_MODEL_MODULE
+  HRTBDA_PHASE1_MODEL_CLASS
+  HRTBDA_PHASE2_MODEL_MODULE
+  HRTBDA_PHASE2_MODEL_CLASS
+  HRTBDA_PHASE1_THRESHOLD
+  HRTBDA_POSTPROCESS_DILATION
+"""
+
+from __future__ import annotations
 
 import argparse
 import csv
@@ -8,7 +54,9 @@ import json
 import os
 import sys
 import time
+from contextlib import nullcontext
 from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -30,8 +78,13 @@ CLASS_RGB = {
     4: (220, 38, 38),     # destroyed - red
 }
 
+DEFAULT_PHASE1_MODEL_MODULE = "transformer.scripts.train_xbd_hrtbda_v2_cascaded_phase1mask"
+DEFAULT_PHASE1_MODEL_CLASS = "HRTBDAPhase1"
+DEFAULT_PHASE2_MODEL_MODULE = "transformer.scripts.train_xbd_hrtbda_v2_cascaded_phase1mask"
+DEFAULT_PHASE2_MODEL_CLASS = "HRTBDAPhase2"
 
-def add_project_to_path():
+
+def add_project_to_path() -> None:
     current = Path(__file__).resolve()
     root = current.parent
 
@@ -43,11 +96,25 @@ def add_project_to_path():
 
     for path in candidates:
         if path.exists():
-            sys.path.insert(0, str(path))
+            path_str = str(path)
+            if path_str not in sys.path:
+                sys.path.insert(0, path_str)
+
+
+def env_str(name: str, default: str = "") -> str:
+    value = os.getenv(name, default)
+    return value if value is not None else default
+
+
+def env_float(name: str, default: Optional[float] = None) -> Optional[float]:
+    value = os.getenv(name, "")
+    if value is None or str(value).strip() == "":
+        return default
+    return float(value)
 
 
 def read_image(path: str) -> np.ndarray:
-    image = cv2.imread(path, cv2.IMREAD_COLOR)
+    image = cv2.imread(str(path), cv2.IMREAD_COLOR)
 
     if image is None:
         raise FileNotFoundError(f"Could not read image: {path}")
@@ -72,13 +139,16 @@ def resize_if_needed(pre_bgr: np.ndarray, post_bgr: np.ndarray) -> np.ndarray:
     )
 
 
-def pad_to_factor(image: np.ndarray, factor: int = 32):
+def pad_to_factor(image: np.ndarray, factor: int = 32) -> Tuple[np.ndarray, Tuple[int, int]]:
     h, w = image.shape[:2]
     new_h = int(np.ceil(h / factor) * factor)
     new_w = int(np.ceil(w / factor) * factor)
 
     pad_h = new_h - h
     pad_w = new_w - w
+
+    if pad_h == 0 and pad_w == 0:
+        return image, (h, w)
 
     padded = cv2.copyMakeBorder(
         image,
@@ -92,28 +162,14 @@ def pad_to_factor(image: np.ndarray, factor: int = 32):
     return padded, (h, w)
 
 
-def normalize_6ch(pre_bgr: np.ndarray, post_bgr: np.ndarray) -> torch.Tensor:
-    """
-    Returns tensor shape [1, 6, H, W].
-
-    Uses ImageNet-style normalization for RGB channels. If your
-    DisasterAdaptiveNet training used a different normalization, update here.
-    """
-    pre_rgb = cv2.cvtColor(pre_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-    post_rgb = cv2.cvtColor(post_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-
-    x = np.concatenate([pre_rgb, post_rgb], axis=2)
-
-    mean = np.array([0.485, 0.456, 0.406, 0.485, 0.456, 0.406], dtype=np.float32)
-    std = np.array([0.229, 0.224, 0.225, 0.229, 0.224, 0.225], dtype=np.float32)
-
-    x = (x - mean) / std
-    x = np.transpose(x, (2, 0, 1))
-
-    return torch.from_numpy(x).unsqueeze(0).float()
-
-
 def normalize_single_rgb(image_bgr: np.ndarray) -> torch.Tensor:
+    """
+    Match the training dataset normalization:
+      RGB
+      /255
+      ImageNet mean/std
+      CHW tensor
+    """
     rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
 
     mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -125,8 +181,8 @@ def normalize_single_rgb(image_bgr: np.ndarray) -> torch.Tensor:
     return torch.from_numpy(rgb).unsqueeze(0).float()
 
 
-def normalize_ground_truth_mask(mask_path: str, target_shape) -> np.ndarray:
-    gt_mask = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
+def normalize_ground_truth_mask(mask_path: str, target_shape: Tuple[int, int]) -> np.ndarray:
+    gt_mask = cv2.imread(str(mask_path), cv2.IMREAD_UNCHANGED)
 
     if gt_mask is None:
         raise FileNotFoundError(f"Could not read ground-truth mask: {mask_path}")
@@ -166,15 +222,20 @@ def normalize_ground_truth_mask(mask_path: str, target_shape) -> np.ndarray:
     if unique_values.issubset({0, 255}):
         print(
             "[WARNING] Ground-truth mask appears binary. "
-            "Per-class F1 needs class labels 0, 1, 2, 3, 4, 255.",
+            "Per-class damage F1 needs class labels 0, 1, 2, 3, 4, 255.",
             flush=True,
         )
 
     return gt_mask
 
 
-def compute_f1_scores(pred_mask: np.ndarray, gt_mask: np.ndarray) -> dict:
-    class_names = {
+def harmonic_mean(values) -> float:
+    values = [float(v) for v in values]
+    return len(values) / sum((v + 1e-6) ** -1 for v in values)
+
+
+def compute_f1_scores(pred_mask: np.ndarray, gt_mask: np.ndarray) -> Dict[str, float]:
+    class_metric_names = {
         1: "no_damage_f1",
         2: "minor_f1",
         3: "major_f1",
@@ -182,9 +243,11 @@ def compute_f1_scores(pred_mask: np.ndarray, gt_mask: np.ndarray) -> dict:
     }
 
     valid = gt_mask != 255
-    scores = {}
+    scores: Dict[str, float] = {}
 
-    for class_id, metric_name in class_names.items():
+    per_class = []
+
+    for class_id, metric_name in class_metric_names.items():
         pred_class = (pred_mask == class_id) & valid
         gt_class = (gt_mask == class_id) & valid
 
@@ -193,26 +256,21 @@ def compute_f1_scores(pred_mask: np.ndarray, gt_mask: np.ndarray) -> dict:
         fn = np.logical_and(~pred_class, gt_class).sum()
 
         f1 = (2 * tp) / ((2 * tp) + fp + fn + 1e-9)
-        scores[metric_name] = round(float(f1), 4)
+        f1 = float(f1)
 
-    scores["macro_f1"] = round(
-        float(
-            np.mean(
-                [
-                    scores["no_damage_f1"],
-                    scores["minor_f1"],
-                    scores["major_f1"],
-                    scores["destroyed_f1"],
-                ]
-            )
-        ),
-        4,
-    )
+        scores[metric_name] = round(f1, 4)
+        per_class.append(f1)
+
+    macro_f1 = float(np.mean(per_class))
+    damage_f1 = harmonic_mean(per_class)
+
+    scores["macro_f1"] = round(macro_f1, 4)
+    scores["damage_f1"] = round(float(damage_f1), 4)
 
     return scores
 
 
-def compute_localization_metrics(pred_mask: np.ndarray, gt_mask: np.ndarray) -> dict:
+def compute_localization_metrics(pred_mask: np.ndarray, gt_mask: np.ndarray) -> Dict[str, float]:
     valid = gt_mask != 255
 
     pred_building = (pred_mask > 0) & valid
@@ -247,7 +305,7 @@ def make_overlay(
     color_mask_rgb: np.ndarray,
     pred_mask: np.ndarray,
     overlay_output: str,
-):
+) -> None:
     post_rgb = cv2.cvtColor(post_bgr, cv2.COLOR_BGR2RGB)
 
     if color_mask_rgb.shape[:2] != post_rgb.shape[:2]:
@@ -276,7 +334,7 @@ def make_overlay(
     cv2.imwrite(str(overlay_output), overlay_bgr)
 
 
-def summarize_by_connected_components(pred_mask: np.ndarray, min_area: int = 20) -> dict:
+def summarize_by_connected_components(pred_mask: np.ndarray, min_area: int = 20) -> Dict[str, Any]:
     building_binary = (pred_mask > 0).astype(np.uint8)
 
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
@@ -332,12 +390,14 @@ def summarize_by_connected_components(pred_mask: np.ndarray, min_area: int = 20)
     }
 
 
-def save_csv(csv_path: str, summary: dict):
+def save_csv(csv_path: str, summary: Dict[str, Any]) -> None:
     counts = summary["damage_counts"]
     percentages = summary["damage_percentages"]
     metrics = summary.get("metrics", {})
+    runtime = summary.get("runtime", {})
+    model_info = summary.get("model_info", {})
 
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+    with open(str(csv_path), "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
 
         writer.writerow(["section", "name", "value"])
@@ -351,11 +411,20 @@ def save_csv(csv_path: str, summary: dict):
         for key, value in metrics.items():
             writer.writerow(["metric", key, value])
 
+        for key, value in runtime.items():
+            writer.writerow(["runtime", key, value])
 
-def inspect_checkpoint(checkpoint_path: str):
-    ckpt = torch.load(checkpoint_path, map_location="cpu")
+        for key, value in model_info.items():
+            if isinstance(value, (dict, list)):
+                value = json.dumps(value)
+            writer.writerow(["model_info", key, value])
+
+
+def inspect_checkpoint(checkpoint_path: str) -> None:
+    ckpt = torch.load(str(checkpoint_path), map_location="cpu")
 
     print("========== CHECKPOINT INSPECTION ==========")
+    print(f"Checkpoint path: {checkpoint_path}")
     print(f"Checkpoint type: {type(ckpt)}")
 
     if isinstance(ckpt, dict):
@@ -369,25 +438,24 @@ def inspect_checkpoint(checkpoint_path: str):
             else:
                 print(f"  {key}: {type(value)}")
 
-        for possible_key in [
-            "state_dict",
-            "model_state_dict",
-            "model",
-            "net",
-            "network",
-            "module",
-            "ema_state_dict",
-        ]:
-            if possible_key in ckpt:
-                print(f"\nFound possible model key: {possible_key}")
-                value = ckpt[possible_key]
-                print(f"Type: {type(value)}")
+        state = extract_state_dict(ckpt)
+        if state is not None:
+            print(f"\nState dict keys: {len(state)}")
+            print("First 40 state_dict keys:")
+            for k in list(state.keys())[:40]:
+                v = state[k]
+                shape = tuple(v.shape) if hasattr(v, "shape") else ""
+                print(f"  {k} {shape}")
 
-                if isinstance(value, dict):
-                    sample_keys = list(value.keys())[:30]
-                    print("Sample state_dict keys:")
-                    for k in sample_keys:
-                        print(f"  {k}")
+            print("\nOutput-like keys:")
+            for k, v in state.items():
+                if any(s in k.lower() for s in ["out.weight", "out.bias", "decoder.out", "head", "classifier"]):
+                    shape = tuple(v.shape) if hasattr(v, "shape") else ""
+                    print(f"  {k} {shape}")
+
+        if "args" in ckpt:
+            print("\nCheckpoint args:")
+            print(json.dumps(ckpt["args"], indent=2, default=str))
 
     elif isinstance(ckpt, torch.nn.Module):
         print("Checkpoint is a full torch.nn.Module.")
@@ -396,7 +464,7 @@ def inspect_checkpoint(checkpoint_path: str):
     print("===========================================")
 
 
-def extract_state_dict(ckpt):
+def extract_state_dict(ckpt: Any) -> Optional[Dict[str, Any]]:
     if isinstance(ckpt, torch.nn.Module):
         return None
 
@@ -417,7 +485,6 @@ def extract_state_dict(ckpt):
         if key in ckpt and isinstance(ckpt[key], dict):
             return ckpt[key]
 
-    # Sometimes checkpoint itself is a state_dict.
     if all(isinstance(k, str) for k in ckpt.keys()):
         tensor_values = [v for v in ckpt.values() if isinstance(v, torch.Tensor)]
         if len(tensor_values) > 0:
@@ -426,7 +493,7 @@ def extract_state_dict(ckpt):
     return None
 
 
-def clean_state_dict_keys(state_dict):
+def clean_state_dict_keys(state_dict: Dict[str, Any]) -> Dict[str, Any]:
     cleaned = {}
 
     for key, value in state_dict.items():
@@ -442,106 +509,133 @@ def clean_state_dict_keys(state_dict):
 
 
 def find_model_class(module_name: str, class_name: str):
+    if not module_name:
+        raise ValueError("Missing model module name.")
+    if not class_name:
+        raise ValueError("Missing model class name.")
+
     module = importlib.import_module(module_name)
     cls = getattr(module, class_name)
+
     return cls
 
 
-def instantiate_model_from_args(args):
-    """
-    This is the only model-specific part.
+def checkpoint_args(ckpt: Any) -> Dict[str, Any]:
+    if isinstance(ckpt, dict) and isinstance(ckpt.get("args"), dict):
+        return dict(ckpt["args"])
+    return {}
 
-    If your checkpoint is a state_dict, the script needs to know the exact
-    DisasterAdaptiveNet model class. You can provide it using:
-      --model_module some.python.module
-      --model_class SomeClass
 
-    Example:
-      --model_module models.hrtbda
-      --model_class HRTBDA
-    """
-    if not args.model_module or not args.model_class:
-        return None
+def instantiate_model(
+    module_name: str,
+    class_name: str,
+    ckpt_args: Dict[str, Any],
+    role: str,
+):
+    cls = find_model_class(module_name, class_name)
 
-    cls = find_model_class(args.model_module, args.model_class)
+    signature = inspect.signature(cls.__init__)
+    params = signature.parameters
+
+    candidate_kwargs = {
+        "base_channels": ckpt_args.get("base_channels", 48),
+        "decoder_channels": ckpt_args.get("decoder_channels", 128),
+        "window_size": ckpt_args.get("window_size", 8),
+        "img_size": ckpt_args.get("img_size", 1024),
+        "image_size": ckpt_args.get("img_size", 1024),
+        "num_classes": 4 if role == "phase2" else 1,
+        "out_channels": 4 if role == "phase2" else 1,
+        "in_channels": 3,
+        "in_chans": 3,
+        "in_ch": 3,
+    }
+
+    kwargs = {
+        key: value
+        for key, value in candidate_kwargs.items()
+        if key in params
+    }
+
+    print(
+        f"[MODEL] Instantiating {role}: {module_name}.{class_name} "
+        f"with kwargs={kwargs}",
+        flush=True,
+    )
 
     try:
-        return cls()
+        return cls(**kwargs)
     except TypeError as exc:
         raise RuntimeError(
-            f"Could import {args.model_module}.{args.model_class}, "
-            "but could not instantiate it with no arguments. "
-            "Edit instantiate_model_from_args() to pass the same constructor "
-            "arguments used during training."
+            f"Could import {module_name}.{class_name}, but could not instantiate it.\n"
+            f"Constructor signature: {signature}\n"
+            f"Tried kwargs: {kwargs}\n"
+            "Update instantiate_model() if this architecture needs different arguments."
         ) from exc
 
 
-def load_model(args, device):
-    checkpoint_path = str(args.checkpoint)
+def load_model_from_checkpoint(
+    checkpoint_path: str,
+    module_name: str,
+    class_name: str,
+    device: torch.device,
+    role: str,
+    strict: bool = False,
+):
+    checkpoint_path = str(checkpoint_path)
 
-    print(f"[MODEL] Loading checkpoint: {checkpoint_path}", flush=True)
+    print(f"[MODEL] Loading {role} checkpoint: {checkpoint_path}", flush=True)
+
+    if not checkpoint_path:
+        raise ValueError(f"Missing checkpoint path for {role}.")
+
+    if not Path(checkpoint_path).exists():
+        raise FileNotFoundError(f"{role} checkpoint not found: {checkpoint_path}")
 
     ckpt = torch.load(checkpoint_path, map_location=device)
 
     if isinstance(ckpt, torch.nn.Module):
-        print("[MODEL] Checkpoint contains a full torch.nn.Module.", flush=True)
+        print(f"[MODEL] {role} checkpoint contains a full torch.nn.Module.", flush=True)
         model = ckpt.to(device)
         model.eval()
-        return model
-
-    # Sometimes the full module is stored under a key.
-    if isinstance(ckpt, dict):
-        for key in ["model_object", "model_module", "full_model"]:
-            if key in ckpt and isinstance(ckpt[key], torch.nn.Module):
-                print(f"[MODEL] Found full model under checkpoint key: {key}", flush=True)
-                model = ckpt[key].to(device)
-                model.eval()
-                return model
+        return model, ckpt
 
     state_dict = extract_state_dict(ckpt)
 
     if state_dict is None:
         raise RuntimeError(
-            "Could not find a model or state_dict inside the checkpoint. "
-            "Run this script with --inspect_checkpoint to see checkpoint contents."
+            f"Could not find a state_dict in {role} checkpoint: {checkpoint_path}. "
+            "Run --inspect_checkpoint to inspect it."
         )
 
-    model = instantiate_model_from_args(args)
-
-    if model is None:
-        raise RuntimeError(
-            "\nThe checkpoint appears to contain only a state_dict, not the full model object.\n"
-            "That means this wrapper needs the DisasterAdaptiveNet architecture class.\n\n"
-            "Run this first:\n"
-            f"  python {Path(__file__).name} --inspect_checkpoint --checkpoint {checkpoint_path}\n\n"
-            "Then find the model class used by your training script and rerun with:\n"
-            "  --model_module MODULE_NAME --model_class CLASS_NAME\n\n"
-            "Example if your code has DisasterAdaptiveNet/models/hrtbda.py with class HRTBDA:\n"
-            "  --model_module models.hrtbda --model_class HRTBDA\n\n"
-            "If the class constructor needs arguments, edit instantiate_model_from_args()."
-        )
+    args_from_ckpt = checkpoint_args(ckpt)
+    model = instantiate_model(
+        module_name=module_name,
+        class_name=class_name,
+        ckpt_args=args_from_ckpt,
+        role=role,
+    )
 
     state_dict = clean_state_dict_keys(state_dict)
 
-    missing, unexpected = model.load_state_dict(state_dict, strict=False)
+    missing, unexpected = model.load_state_dict(state_dict, strict=strict)
 
-    print(f"[MODEL] Loaded state_dict with strict=False", flush=True)
-    print(f"[MODEL] Missing keys: {len(missing)}", flush=True)
-    print(f"[MODEL] Unexpected keys: {len(unexpected)}", flush=True)
-
-    if len(unexpected) > 0:
-        print("[MODEL] Sample unexpected keys:", unexpected[:20], flush=True)
+    print(f"[MODEL] Loaded {role} state_dict with strict={strict}", flush=True)
+    print(f"[MODEL] {role} missing keys: {len(missing)}", flush=True)
+    print(f"[MODEL] {role} unexpected keys: {len(unexpected)}", flush=True)
 
     if len(missing) > 0:
-        print("[MODEL] Sample missing keys:", missing[:20], flush=True)
+        print(f"[MODEL] {role} sample missing keys: {list(missing)[:20]}", flush=True)
+
+    if len(unexpected) > 0:
+        print(f"[MODEL] {role} sample unexpected keys: {list(unexpected)[:20]}", flush=True)
 
     model = model.to(device)
     model.eval()
 
-    return model
+    return model, ckpt
 
 
-def extract_tensor_from_model_output(output):
+def extract_tensor_from_model_output(output: Any) -> torch.Tensor:
     if isinstance(output, torch.Tensor):
         return output
 
@@ -582,108 +676,257 @@ def extract_tensor_from_model_output(output):
     raise RuntimeError(f"Unsupported model output type: {type(output)}")
 
 
-def run_model_forward(model, x6, pre_tensor, post_tensor, args):
-    """
-    Tries common forward signatures:
-      model(x6)
-      model(pre, post)
-      model({"image": x6, "pre": pre, "post": post})
-    """
+def phase1_logits_to_mask(
+    phase1_output: Any,
+    original_shape: Tuple[int, int],
+    threshold: float,
+) -> Tuple[np.ndarray, torch.Tensor]:
+    logits = extract_tensor_from_model_output(phase1_output)
 
-    errors = []
+    print(f"[PHASE1] Output tensor shape: {tuple(logits.shape)}", flush=True)
 
-    try:
-        return model(x6)
-    except Exception as exc:
-        errors.append(f"model(x6) failed: {repr(exc)}")
+    if logits.ndim == 4:
+        if logits.shape[1] == 1:
+            logits_2d = logits[0, 0]
+        else:
+            logits_2d = logits[0, 0]
+    elif logits.ndim == 3:
+        if logits.shape[0] == 1:
+            logits_2d = logits[0]
+        else:
+            logits_2d = logits[0]
+    elif logits.ndim == 2:
+        logits_2d = logits
+    else:
+        raise RuntimeError(f"Unsupported Phase I output shape: {tuple(logits.shape)}")
 
-    try:
-        return model(pre_tensor, post_tensor)
-    except Exception as exc:
-        errors.append(f"model(pre, post) failed: {repr(exc)}")
+    prob = torch.sigmoid(logits_2d)
+    mask = (prob > float(threshold)).detach().cpu().numpy().astype(np.uint8)
 
-    try:
-        return model(
-            {
-                "image": x6,
-                "x": x6,
-                "pre": pre_tensor,
-                "post": post_tensor,
-                "pre_image": pre_tensor,
-                "post_image": post_tensor,
-            }
+    original_h, original_w = original_shape
+    mask = mask[:original_h, :original_w]
+
+    return mask, logits
+
+
+def phase2_logits_to_damage(
+    phase2_output: Any,
+    original_shape: Tuple[int, int],
+) -> Tuple[np.ndarray, torch.Tensor]:
+    logits = extract_tensor_from_model_output(phase2_output)
+
+    print(f"[PHASE2] Output tensor shape: {tuple(logits.shape)}", flush=True)
+
+    if logits.ndim == 4:
+        logits_3d = logits[0]
+    elif logits.ndim == 3:
+        logits_3d = logits
+    else:
+        raise RuntimeError(f"Unsupported Phase II output shape: {tuple(logits.shape)}")
+
+    channels = logits_3d.shape[0]
+
+    if channels == 4:
+        damage = torch.argmax(logits_3d, dim=0).detach().cpu().numpy().astype(np.uint8) + 1
+    elif channels == 5:
+        damage = torch.argmax(logits_3d, dim=0).detach().cpu().numpy().astype(np.uint8)
+    else:
+        raise RuntimeError(
+            f"Phase II should output 4 foreground damage classes or 5 full classes. "
+            f"Got channels={channels}."
         )
-    except Exception as exc:
-        errors.append(f"model(dict) failed: {repr(exc)}")
 
-    raise RuntimeError(
-        "Could not run model forward with common signatures.\n"
-        + "\n".join(errors)
-        + "\n\nEdit run_model_forward() to match the forward() method of your DisasterAdaptiveNet model."
+    original_h, original_w = original_shape
+    damage = damage[:original_h, :original_w]
+    damage = damage.astype(np.uint8)
+
+    damage[~np.isin(damage, [0, 1, 2, 3, 4])] = 0
+
+    return damage, logits
+
+
+def apply_damage_postprocess(
+    pred_mask: np.ndarray,
+    building_mask: np.ndarray,
+    mode: str,
+    kernel_size: int = 3,
+) -> np.ndarray:
+    """
+    Optional light post-processing.
+
+    mode:
+      none  = no change
+      minor = conservatively dilate minor-damage predictions inside Phase I building mask
+
+    This is intentionally conservative for dashboard use.
+    """
+    mode = (mode or "none").lower().strip()
+
+    if mode in {"", "none", "off", "false", "0"}:
+        return pred_mask
+
+    out = pred_mask.copy()
+    kernel = np.ones((int(kernel_size), int(kernel_size)), dtype=np.uint8)
+    building = building_mask.astype(bool)
+
+    if mode == "minor":
+        minor = (out == 2).astype(np.uint8)
+        dilated_minor = cv2.dilate(minor, kernel, iterations=1).astype(bool)
+
+        # Only spread minor into Phase I building pixels currently predicted no-damage.
+        update = dilated_minor & building & (out == 1)
+        out[update] = 2
+
+        return out
+
+    print(f"[WARNING] Unknown postprocess mode '{mode}'. Skipping.", flush=True)
+    return pred_mask
+
+
+def run_cascade(
+    args: argparse.Namespace,
+    device: torch.device,
+    pre_tensor: torch.Tensor,
+    post_tensor: torch.Tensor,
+    original_shape: Tuple[int, int],
+):
+    phase1_checkpoint = args.phase1_checkpoint or env_str("HRTBDA_PHASE1_CHECKPOINT", "")
+    phase2_checkpoint = args.phase2_checkpoint or env_str("HRTBDA_PHASE2_CHECKPOINT", "") or args.checkpoint
+
+    phase1_module = args.phase1_model_module
+    phase1_class = args.phase1_model_class
+    phase2_module = args.phase2_model_module
+    phase2_class = args.phase2_model_class
+
+    if not phase1_checkpoint:
+        raise ValueError(
+            "Missing Phase I checkpoint. Set HRTBDA_PHASE1_CHECKPOINT or pass --phase1_checkpoint."
+        )
+
+    if not phase2_checkpoint:
+        raise ValueError(
+            "Missing Phase II checkpoint. Set HRTBDA_PHASE2_CHECKPOINT or pass --phase2_checkpoint/--checkpoint."
+        )
+
+    phase1_model, phase1_ckpt = load_model_from_checkpoint(
+        checkpoint_path=phase1_checkpoint,
+        module_name=phase1_module,
+        class_name=phase1_class,
+        device=device,
+        role="phase1",
+        strict=False,
+    )
+
+    phase2_model, phase2_ckpt = load_model_from_checkpoint(
+        checkpoint_path=phase2_checkpoint,
+        module_name=phase2_module,
+        class_name=phase2_class,
+        device=device,
+        role="phase2",
+        strict=False,
+    )
+
+    phase1_threshold = args.phase1_threshold
+    if phase1_threshold is None:
+        phase1_threshold = env_float("HRTBDA_PHASE1_THRESHOLD", None)
+
+    if phase1_threshold is None and isinstance(phase1_ckpt, dict):
+        phase1_threshold = float(phase1_ckpt.get("best_threshold", args.threshold))
+
+    if phase1_threshold is None:
+        phase1_threshold = float(args.threshold)
+
+    print(f"[CASCADE] Phase I threshold: {phase1_threshold}", flush=True)
+
+    autocast_ctx = (
+        torch.cuda.amp.autocast()
+        if args.amp and device.type == "cuda"
+        else nullcontext()
+    )
+
+    with torch.no_grad():
+        with autocast_ctx:
+            phase1_output = phase1_model(pre_tensor)
+            phase2_output = phase2_model(pre_tensor, post_tensor)
+
+    loc_mask, phase1_logits = phase1_logits_to_mask(
+        phase1_output=phase1_output,
+        original_shape=original_shape,
+        threshold=float(phase1_threshold),
+    )
+
+    damage_pred, phase2_logits = phase2_logits_to_damage(
+        phase2_output=phase2_output,
+        original_shape=original_shape,
+    )
+
+    final_pred = np.zeros_like(damage_pred, dtype=np.uint8)
+    final_pred[loc_mask.astype(bool)] = damage_pred[loc_mask.astype(bool)]
+
+    final_pred = apply_damage_postprocess(
+        pred_mask=final_pred,
+        building_mask=loc_mask,
+        mode=args.postprocess_dilation,
+        kernel_size=args.dilation_kernel,
+    )
+
+    final_pred[~np.isin(final_pred, [0, 1, 2, 3, 4])] = 0
+
+    cascade_info = {
+        "phase1_checkpoint": str(phase1_checkpoint),
+        "phase2_checkpoint": str(phase2_checkpoint),
+        "phase1_threshold": float(phase1_threshold),
+        "phase1_model_module": phase1_module,
+        "phase1_model_class": phase1_class,
+        "phase2_model_module": phase2_module,
+        "phase2_model_class": phase2_class,
+        "phase1_epoch": int(phase1_ckpt.get("epoch", -1)) if isinstance(phase1_ckpt, dict) else None,
+        "phase2_epoch": int(phase2_ckpt.get("epoch", -1)) if isinstance(phase2_ckpt, dict) else None,
+        "phase1_best_metric": float(phase1_ckpt.get("best_metric", -1.0)) if isinstance(phase1_ckpt, dict) else None,
+        "phase2_best_metric": float(phase2_ckpt.get("best_metric", -1.0)) if isinstance(phase2_ckpt, dict) else None,
+        "postprocess_dilation": args.postprocess_dilation,
+        "phase1_output_tensor_shape": list(phase1_logits.shape),
+        "phase2_output_tensor_shape": list(phase2_logits.shape),
+    }
+
+    return final_pred, loc_mask, cascade_info
+
+
+def save_outputs(
+    args: argparse.Namespace,
+    pred_np: np.ndarray,
+    loc_mask: np.ndarray,
+    post_bgr: np.ndarray,
+) -> None:
+    output_parent = Path(args.building_mask_output).parent
+    output_parent.mkdir(parents=True, exist_ok=True)
+
+    building_mask = (loc_mask.astype(np.uint8)) * 255
+    color_mask_rgb = colorize_mask(pred_np)
+    color_mask_bgr = cv2.cvtColor(color_mask_rgb, cv2.COLOR_RGB2BGR)
+
+    cv2.imwrite(str(args.building_mask_output), building_mask)
+    cv2.imwrite(str(args.damage_mask_output), color_mask_bgr)
+    cv2.imwrite(str(args.damage_index_output), pred_np)
+
+    make_overlay(
+        post_bgr=post_bgr,
+        color_mask_rgb=color_mask_rgb,
+        pred_mask=pred_np,
+        overlay_output=args.overlay_output,
     )
 
 
-def tensor_to_prediction_mask(output_tensor: torch.Tensor, original_shape, threshold: float) -> np.ndarray:
-    """
-    Converts model output tensor to class mask with values:
-      0 = background
-      1 = no damage
-      2 = minor
-      3 = major
-      4 = destroyed
-    """
-
-    if output_tensor.ndim == 4:
-        output_tensor = output_tensor[0]
-
-    if output_tensor.ndim == 3:
-        channels, h, w = output_tensor.shape
-
-        if channels >= 5:
-            pred = torch.argmax(output_tensor, dim=0).detach().cpu().numpy().astype(np.uint8)
-
-        elif channels == 4:
-            pred = torch.argmax(output_tensor, dim=0).detach().cpu().numpy().astype(np.uint8)
-            pred = pred + 1
-
-        elif channels == 1:
-            prob = torch.sigmoid(output_tensor[0])
-            pred = (prob > float(threshold)).detach().cpu().numpy().astype(np.uint8)
-
-        else:
-            raise RuntimeError(f"Unsupported output channel count: {channels}")
-
-    elif output_tensor.ndim == 2:
-        values = output_tensor.detach().cpu().numpy()
-
-        if np.issubdtype(values.dtype, np.integer):
-            pred = values.astype(np.uint8)
-        else:
-            pred = (values > float(threshold)).astype(np.uint8)
-
-    else:
-        raise RuntimeError(f"Unsupported output tensor shape: {tuple(output_tensor.shape)}")
-
-    original_h, original_w = original_shape
-    pred = pred[:original_h, :original_w]
-
-    pred = pred.astype(np.uint8)
-
-    # Keep only expected labels.
-    pred[~np.isin(pred, [0, 1, 2, 3, 4])] = 0
-
-    return pred
-
-
-def main():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Single-pair inference wrapper for DisasterAdaptiveNet HRTBDA."
+        description="Single-pair inference wrapper for DisasterAdaptiveNet HRTBDA cascade."
     )
 
     parser.add_argument("--pre_image")
     parser.add_argument("--post_image")
     parser.add_argument("--gt_mask")
 
+    # Existing backend-compatible args.
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--checkpoint_dir", default=None)
     parser.add_argument("--threshold", type=float, default=0.40)
@@ -699,18 +942,89 @@ def main():
     parser.add_argument("--amp", action="store_true")
     parser.add_argument("--min_area", type=int, default=20)
 
-    # Optional: needed if checkpoint is state_dict only.
-    parser.add_argument("--model_module", default=os.getenv("HRTBDA_MODEL_MODULE", ""))
-    parser.add_argument("--model_class", default=os.getenv("HRTBDA_MODEL_CLASS", ""))
+    # New cascade args. These default to environment variables.
+    parser.add_argument(
+        "--phase1_checkpoint",
+        default=env_str("HRTBDA_PHASE1_CHECKPOINT", ""),
+    )
+    parser.add_argument(
+        "--phase2_checkpoint",
+        default=env_str("HRTBDA_PHASE2_CHECKPOINT", ""),
+    )
+
+    parser.add_argument(
+        "--phase1_model_module",
+        default=env_str(
+            "HRTBDA_PHASE1_MODEL_MODULE",
+            env_str("HRTBDA_MODEL_MODULE", DEFAULT_PHASE1_MODEL_MODULE),
+        ),
+    )
+    parser.add_argument(
+        "--phase1_model_class",
+        default=env_str(
+            "HRTBDA_PHASE1_MODEL_CLASS",
+            env_str("HRTBDA_MODEL_CLASS", DEFAULT_PHASE1_MODEL_CLASS),
+        ),
+    )
+    parser.add_argument(
+        "--phase2_model_module",
+        default=env_str(
+            "HRTBDA_PHASE2_MODEL_MODULE",
+            env_str("HRTBDA_MODEL_MODULE", DEFAULT_PHASE2_MODEL_MODULE),
+        ),
+    )
+    parser.add_argument(
+        "--phase2_model_class",
+        default=env_str(
+            "HRTBDA_PHASE2_MODEL_CLASS",
+            env_str("HRTBDA_MODEL_CLASS", DEFAULT_PHASE2_MODEL_CLASS),
+        ),
+    )
+
+    parser.add_argument(
+        "--phase1_threshold",
+        type=float,
+        default=env_float("HRTBDA_PHASE1_THRESHOLD", None),
+    )
+
+    parser.add_argument(
+        "--postprocess_dilation",
+        default=env_str("HRTBDA_POSTPROCESS_DILATION", "none"),
+        choices=["none", "minor"],
+    )
+    parser.add_argument(
+        "--dilation_kernel",
+        type=int,
+        default=int(env_str("HRTBDA_DILATION_KERNEL", "3")),
+    )
 
     parser.add_argument("--inspect_checkpoint", action="store_true")
+    parser.add_argument("--inspect_cascade", action="store_true")
 
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
 
     add_project_to_path()
 
     if args.inspect_checkpoint:
         inspect_checkpoint(args.checkpoint)
+        return
+
+    if args.inspect_cascade:
+        print("========== CASCADE CONFIG ==========")
+        print(f"checkpoint:              {args.checkpoint}")
+        print(f"phase1_checkpoint:       {args.phase1_checkpoint}")
+        print(f"phase2_checkpoint:       {args.phase2_checkpoint or args.checkpoint}")
+        print(f"phase1_model_module:     {args.phase1_model_module}")
+        print(f"phase1_model_class:      {args.phase1_model_class}")
+        print(f"phase2_model_module:     {args.phase2_model_module}")
+        print(f"phase2_model_class:      {args.phase2_model_class}")
+        print(f"phase1_threshold:        {args.phase1_threshold}")
+        print(f"postprocess_dilation:    {args.postprocess_dilation}")
+        print("====================================")
         return
 
     required = [
@@ -740,31 +1054,24 @@ def main():
     post_bgr = resize_if_needed(pre_bgr, post_bgr)
 
     original_h, original_w = pre_bgr.shape[:2]
+    original_shape = (original_h, original_w)
 
     pre_padded, _ = pad_to_factor(pre_bgr, 32)
     post_padded, _ = pad_to_factor(post_bgr, 32)
 
-    x6 = normalize_6ch(pre_padded, post_padded).to(device)
     pre_tensor = normalize_single_rgb(pre_padded).to(device)
     post_tensor = normalize_single_rgb(post_padded).to(device)
 
-    model = load_model(args, device)
+    print(f"[INPUT] Original shape: {original_shape}", flush=True)
+    print(f"[INPUT] Padded pre tensor: {tuple(pre_tensor.shape)}", flush=True)
+    print(f"[INPUT] Padded post tensor: {tuple(post_tensor.shape)}", flush=True)
 
-    with torch.no_grad():
-        if args.amp and device.type == "cuda":
-            with torch.cuda.amp.autocast():
-                output = run_model_forward(model, x6, pre_tensor, post_tensor, args)
-        else:
-            output = run_model_forward(model, x6, pre_tensor, post_tensor, args)
-
-    output_tensor = extract_tensor_from_model_output(output)
-
-    print(f"[MODEL] Output tensor shape: {tuple(output_tensor.shape)}", flush=True)
-
-    pred_np = tensor_to_prediction_mask(
-        output_tensor=output_tensor,
-        original_shape=(original_h, original_w),
-        threshold=args.threshold,
+    pred_np, loc_mask, cascade_info = run_cascade(
+        args=args,
+        device=device,
+        pre_tensor=pre_tensor,
+        post_tensor=post_tensor,
+        original_shape=original_shape,
     )
 
     gt_mask = normalize_ground_truth_mask(
@@ -775,28 +1082,25 @@ def main():
     localization_metrics = compute_localization_metrics(pred_np, gt_mask)
     damage_metrics = compute_f1_scores(pred_np, gt_mask)
 
+    damage_f1 = float(damage_metrics.get("damage_f1", 0.0))
+    localization_f1 = float(localization_metrics.get("localization_f1", 0.0))
+    overall_score = 0.3 * localization_f1 + 0.7 * damage_f1
+
     metrics = {
         **localization_metrics,
         **damage_metrics,
-        "metrics_note": "Image-specific F1 calculated using uploaded ground-truth post-disaster mask.",
+        "overall_score": round(float(overall_score), 4),
+        "metrics_note": (
+            "Image-specific F1 calculated using uploaded ground-truth post-disaster mask. "
+            "Localization comes from Phase I mask. Damage classes come from Phase II foreground classifier."
+        ),
     }
 
-    output_parent = Path(args.building_mask_output).parent
-    output_parent.mkdir(parents=True, exist_ok=True)
-
-    building_mask = ((pred_np > 0).astype(np.uint8)) * 255
-    color_mask_rgb = colorize_mask(pred_np)
-    color_mask_bgr = cv2.cvtColor(color_mask_rgb, cv2.COLOR_RGB2BGR)
-
-    cv2.imwrite(str(args.building_mask_output), building_mask)
-    cv2.imwrite(str(args.damage_mask_output), color_mask_bgr)
-    cv2.imwrite(str(args.damage_index_output), pred_np)
-
-    make_overlay(
+    save_outputs(
+        args=args,
+        pred_np=pred_np,
+        loc_mask=loc_mask,
         post_bgr=post_bgr,
-        color_mask_rgb=color_mask_rgb,
-        pred_mask=pred_np,
-        overlay_output=args.overlay_output,
     )
 
     summary = summarize_by_connected_components(
@@ -810,29 +1114,36 @@ def main():
 
     summary["runtime"] = {
         "model_name": args.model_name,
-        "model_family": "hrtbda",
+        "model_family": "hrtbda_cascade",
         "device": str(device),
         "model_total_seconds": round(float(total_seconds), 3),
     }
 
     summary["model_info"] = {
         "model_name": args.model_name,
-        "model_family": "hrtbda",
-        "checkpoint": str(args.checkpoint),
+        "model_family": "hrtbda_cascade",
+        "backend_checkpoint_arg": str(args.checkpoint),
         "checkpoint_dir": str(args.checkpoint_dir),
-        "threshold": args.threshold,
-        "model_module": args.model_module,
-        "model_class": args.model_class,
-        "output_tensor_shape": list(output_tensor.shape),
+        "threshold_arg": args.threshold,
+        "cascade": cascade_info,
         "prediction_unique_values": sorted(np.unique(pred_np).astype(int).tolist()),
+        "phase1_mask_unique_values": sorted(np.unique(loc_mask).astype(int).tolist()),
         "gt_mask_unique_values": sorted(np.unique(gt_mask).astype(int).tolist()),
+        "class_map": {
+            "0": "background",
+            "1": "no_damage",
+            "2": "minor",
+            "3": "major",
+            "4": "destroyed",
+            "255": "ignore/unknown in ground truth only",
+        },
         "note": (
-            "This wrapper assumes the model outputs either 5-class logits, "
-            "4-class damage logits, binary logits, or a class-index mask."
+            "This script runs the HRTBDA two-phase cascade: Phase I localization mask "
+            "plus Phase II 4-class foreground damage prediction."
         ),
     }
 
-    with open(args.summary_json, "w", encoding="utf-8") as f:
+    with open(str(args.summary_json), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
     save_csv(args.summary_csv, summary)
