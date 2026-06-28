@@ -6,7 +6,7 @@
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:1
 #SBATCH --time=96:00:00
-#SBATCH --job-name=hrtbda_E0056
+#SBATCH --job-name=E0056_xBD_LauraDelta_to_Irma
 #SBATCH --output=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/cross_DS/sbatch/logs/%x_%j.out
 #SBATCH --error=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/cross_DS/sbatch/logs/%x_%j.err
 
@@ -82,7 +82,11 @@ fi
 eval "$("$CONDA_EXE" shell.bash hook)"
 conda activate disasteradaptivenet_cu128
 
-echo "===== HRTBDA-v5 PLANNED EXPERIMENT ====="
+echo "================================================"
+echo "HRTBDA-v5 Planned Experiment E0056"
+echo "xBD-pretrained fine-tuning: Hurricane Laura + Hurricane Delta"
+echo "Testing on unseen Hurricane Irma"
+echo "================================================"
 date
 hostname
 pwd
@@ -96,12 +100,15 @@ echo "MODE: $MODE"
 echo "COMBINED_ROOT: $COMBINED_ROOT"
 echo "STAGING_ROOT: $STAGING_ROOT"
 echo "OUTPUT_DIR: $OUTPUT_DIR"
+echo "================================================"
 
+echo "===== CLEAN OLD OUTPUT FOR E0056 ====="
 rm -rf "$COMBINED_ROOT"
 rm -rf "$STAGING_ROOT"
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR" "$OUTPUT_DIR/checkpoints" "$OUTPUT_DIR/scores"
 
+echo "===== PREPARE COMBINED DATASET ====="
 python -u "$PREP_SCRIPT" \
   --experiment-id "$EXPERIMENT_ID" \
   --project-root "$PROJECT_ROOT" \
@@ -111,6 +118,7 @@ python -u "$PREP_SCRIPT" \
   --mode symlink \
   --clean
 
+echo "===== CHECK COMBINED DATASET FORMAT ====="
 python -u transformer/scripts/check_idabd_xbd_format.py \
   --root "$COMBINED_ROOT" \
   --splits train val test
@@ -121,36 +129,46 @@ PHASE2_INIT_ARGS=()
 echo "===== xBD TRANSFER MODE ENABLED ====="
 
 if [ ! -f "$XBD_PHASE1_CKPT" ]; then
-  echo "ERROR: xBD Phase-I checkpoint not found: $XBD_PHASE1_CKPT"
+  echo "ERROR: xBD Phase-I checkpoint not found:"
+  echo "$XBD_PHASE1_CKPT"
   exit 1
 fi
 
-HELP_TEXT=$(python -u "$HRTBDA_SCRIPT" --help 2>&1 || true)
+# The Python script does NOT support --phase1-init-checkpoint.
+# It supports --resume-phase1-from.
+# To use the xBD checkpoint as initialization instead of a true resume,
+# we copy it and reset epoch/optimizer/scheduler/scaler.
+XBD_PHASE1_INIT_CKPT=$OUTPUT_DIR/checkpoints/xbd_phase1_init_epoch0.pt
 
-if echo "$HELP_TEXT" | grep -q -- "--phase1-init-checkpoint"; then
-  PHASE1_INIT_ARGS=(--phase1-init-checkpoint "$XBD_PHASE1_CKPT")
-elif echo "$HELP_TEXT" | grep -q -- "--pretrained-checkpoint"; then
-  PHASE1_INIT_ARGS=(--pretrained-checkpoint "$XBD_PHASE1_CKPT")
-elif echo "$HELP_TEXT" | grep -q -- "--init-checkpoint"; then
-  PHASE1_INIT_ARGS=(--init-checkpoint "$XBD_PHASE1_CKPT")
-else
-  echo "ERROR: Could not find supported Phase-I initialization argument."
-  exit 1
-fi
+echo "===== CREATE xBD PHASE-I INITIALIZATION CHECKPOINT ====="
+python - <<PY
+import torch
+from pathlib import Path
 
-if [ -f "$XBD_PHASE2_CKPT" ]; then
-  if echo "$HELP_TEXT" | grep -q -- "--phase2-init-checkpoint"; then
-    PHASE2_INIT_ARGS=(--phase2-init-checkpoint "$XBD_PHASE2_CKPT")
-  elif echo "$HELP_TEXT" | grep -q -- "--init-phase2-checkpoint"; then
-    PHASE2_INIT_ARGS=(--init-phase2-checkpoint "$XBD_PHASE2_CKPT")
-  elif echo "$HELP_TEXT" | grep -q -- "--phase2-pretrained-checkpoint"; then
-    PHASE2_INIT_ARGS=(--phase2-pretrained-checkpoint "$XBD_PHASE2_CKPT")
-  else
-    echo "WARNING: No supported Phase-II initialization argument found."
-  fi
-fi
+src = Path("$XBD_PHASE1_CKPT")
+dst = Path("$XBD_PHASE1_INIT_CKPT")
 
-echo "===== STEP 1: Train Phase I ====="
+ckpt = torch.load(src, map_location="cpu")
+
+ckpt["epoch"] = 0
+ckpt["best_metric"] = -1.0
+ckpt["best_threshold"] = 0.5
+ckpt["optimizer"] = None
+ckpt["scheduler"] = None
+ckpt["scaler"] = None
+
+dst.parent.mkdir(parents=True, exist_ok=True)
+torch.save(ckpt, dst)
+
+print(f"Created xBD initialization checkpoint: {dst}", flush=True)
+PY
+
+PHASE1_INIT_ARGS=(--resume-phase1-from "$XBD_PHASE1_INIT_CKPT")
+
+echo "PHASE1_INIT_ARGS: ${PHASE1_INIT_ARGS[@]}"
+echo "PHASE2_INIT_ARGS: ${PHASE2_INIT_ARGS[@]}"
+
+echo "===== STEP 1: TRAIN PHASE I WITH xBD INITIALIZATION ====="
 
 python -u "$HRTBDA_SCRIPT" \
   --phase phase1 \
@@ -180,11 +198,15 @@ python -u "$HRTBDA_SCRIPT" \
 PHASE1_CKPT=$OUTPUT_DIR/checkpoints/phase1_best.pt
 
 if [ ! -f "$PHASE1_CKPT" ]; then
-  echo "ERROR: expected Phase-I checkpoint not found: $PHASE1_CKPT"
+  echo "ERROR: expected Phase-I checkpoint not found:"
+  echo "$PHASE1_CKPT"
   exit 1
 fi
 
-echo "===== STEP 2: Train Phase II and test ====="
+echo "Found Phase-I checkpoint:"
+ls -lh "$PHASE1_CKPT"
+
+echo "===== STEP 2: TRAIN PHASE II AND TEST ON HURRICANE IRMA ====="
 
 python -u "$HRTBDA_SCRIPT" \
   --phase phase2_test \
@@ -217,4 +239,4 @@ python -u "$HRTBDA_SCRIPT" \
   --dilation-kernel "$DILATION_KERNEL" \
   --amp
 
-echo "===== DONE $EXPERIMENT_ID ====="
+echo "===== DONE E0056: xBD-pretrained Laura + Delta -> Hurricane Irma ====="
