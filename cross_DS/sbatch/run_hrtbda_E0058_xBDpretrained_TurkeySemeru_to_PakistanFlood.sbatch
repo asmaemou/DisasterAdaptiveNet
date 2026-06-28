@@ -134,32 +134,36 @@ if [ ! -f "$XBD_PHASE1_CKPT" ]; then
   exit 1
 fi
 
-HELP_TEXT=$(python -u "$HRTBDA_SCRIPT" --help 2>&1 || true)
+# The Python script does NOT support --phase1-init-checkpoint.
+# It supports --resume-phase1-from.
+# To use the xBD checkpoint as initialization instead of a true resume,
+# we copy it and reset epoch/optimizer/scheduler/scaler.
+XBD_PHASE1_INIT_CKPT=$OUTPUT_DIR/checkpoints/xbd_phase1_init_epoch0.pt
 
-if echo "$HELP_TEXT" | grep -q -- "--phase1-init-checkpoint"; then
-  PHASE1_INIT_ARGS=(--phase1-init-checkpoint "$XBD_PHASE1_CKPT")
-elif echo "$HELP_TEXT" | grep -q -- "--pretrained-checkpoint"; then
-  PHASE1_INIT_ARGS=(--pretrained-checkpoint "$XBD_PHASE1_CKPT")
-elif echo "$HELP_TEXT" | grep -q -- "--init-checkpoint"; then
-  PHASE1_INIT_ARGS=(--init-checkpoint "$XBD_PHASE1_CKPT")
-else
-  echo "ERROR: Could not find supported Phase-I initialization argument."
-  echo "Run manually: python $HRTBDA_SCRIPT --help | grep checkpoint"
-  exit 1
-fi
+echo "===== CREATE xBD PHASE-I INITIALIZATION CHECKPOINT ====="
+python - <<PY
+import torch
+from pathlib import Path
 
-if [ -f "$XBD_PHASE2_CKPT" ]; then
-  if echo "$HELP_TEXT" | grep -q -- "--phase2-init-checkpoint"; then
-    PHASE2_INIT_ARGS=(--phase2-init-checkpoint "$XBD_PHASE2_CKPT")
-  elif echo "$HELP_TEXT" | grep -q -- "--init-phase2-checkpoint"; then
-    PHASE2_INIT_ARGS=(--init-phase2-checkpoint "$XBD_PHASE2_CKPT")
-  elif echo "$HELP_TEXT" | grep -q -- "--phase2-pretrained-checkpoint"; then
-    PHASE2_INIT_ARGS=(--phase2-pretrained-checkpoint "$XBD_PHASE2_CKPT")
-  else
-    echo "WARNING: No supported Phase-II initialization argument found."
-    echo "Continuing Phase II without separate Phase-II initialization."
-  fi
-fi
+src = Path("$XBD_PHASE1_CKPT")
+dst = Path("$XBD_PHASE1_INIT_CKPT")
+
+ckpt = torch.load(src, map_location="cpu")
+
+ckpt["epoch"] = 0
+ckpt["best_metric"] = -1.0
+ckpt["best_threshold"] = 0.5
+ckpt["optimizer"] = None
+ckpt["scheduler"] = None
+ckpt["scaler"] = None
+
+dst.parent.mkdir(parents=True, exist_ok=True)
+torch.save(ckpt, dst)
+
+print(f"Created xBD initialization checkpoint: {dst}", flush=True)
+PY
+
+PHASE1_INIT_ARGS=(--resume-phase1-from "$XBD_PHASE1_INIT_CKPT")
 
 echo "PHASE1_INIT_ARGS: ${PHASE1_INIT_ARGS[@]}"
 echo "PHASE2_INIT_ARGS: ${PHASE2_INIT_ARGS[@]}"
