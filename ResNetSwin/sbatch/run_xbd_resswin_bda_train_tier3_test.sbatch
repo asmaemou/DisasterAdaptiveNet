@@ -7,14 +7,19 @@
 #SBATCH --gres=gpu:1
 #SBATCH --time=16:00:00
 #SBATCH --job-name=resswin_bda_xbd
-#SBATCH --output=ResSwinBDA/sbatch/logs/%x_%j.out
-#SBATCH --error=ResSwinBDA/sbatch/logs/%x_%j.err
+#SBATCH --output=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/ResNetSwin/sbatch/logs/%x_%j.out
+#SBATCH --error=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/ResNetSwin/sbatch/logs/%x_%j.err
 
 set -euo pipefail
 export PYTHONUNBUFFERED=1
 
-cd /homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
-mkdir -p ResSwinBDA/sbatch/logs
+PROJECT_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
+MODEL_DIR=$PROJECT_DIR/ResNetSwin
+PY_SCRIPT=$MODEL_DIR/script/train_xbd_resswin_bda.py
+
+cd "$PROJECT_DIR"
+
+mkdir -p "$MODEL_DIR/sbatch/logs"
 
 EXPERIMENT_NAME=train_plus_tier3_test_xbd_resswin_bda
 
@@ -23,7 +28,7 @@ TRAIN_SPLITS=(train tier3)
 VAL_SPLIT=hold
 TEST_SPLIT=test
 
-OUTPUT_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/$EXPERIMENT_NAME
+OUTPUT_DIR=$PROJECT_DIR/output/$EXPERIMENT_NAME
 mkdir -p "$OUTPUT_DIR" "$OUTPUT_DIR/checkpoints" "$OUTPUT_DIR/scores" "$OUTPUT_DIR/predictions"
 
 # Model / training settings
@@ -83,6 +88,8 @@ pwd
 which python
 python --version
 echo "MODEL: ResSwin-BDA = shared Siamese ResNet34 + abs-diff fusion + Swin-style context + FPN decoder"
+echo "MODEL_DIR: $MODEL_DIR"
+echo "PY_SCRIPT: $PY_SCRIPT"
 echo "XBD_ROOT: $XBD_ROOT"
 echo "TRAIN_SPLITS: ${TRAIN_SPLITS[*]}"
 echo "VAL_SPLIT: $VAL_SPLIT"
@@ -99,13 +106,13 @@ echo "AMP: enabled"
 nvidia-smi || true
 echo "===================="
 
-if [ ! -f ResSwinBDA/scripts/train_xbd_resswin_bda.py ]; then
-  echo "ERROR: missing script: ResSwinBDA/scripts/train_xbd_resswin_bda.py"
+if [ ! -f "$PY_SCRIPT" ]; then
+  echo "ERROR: missing script: $PY_SCRIPT"
   exit 1
 fi
 
 CMD=(
-  python -u ResSwinBDA/scripts/train_xbd_resswin_bda.py
+  python -u "$PY_SCRIPT"
   --phase train_test
   --xbd-root "$XBD_ROOT"
   --train-split "${TRAIN_SPLITS[@]}"
