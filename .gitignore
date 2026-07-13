@@ -4,3 +4,94 @@ utils/__pycache__/
 *ipynb
 .ipynb_checkpoints/
 x_post.ph
+
+
+
+
+# Python cache
+
+
+__pycache__/
+
+
+*.py[cod]
+
+
+
+
+
+# Logs
+
+
+**/logs/
+
+
+*.log
+
+
+*.out
+
+
+*.err
+
+
+
+
+
+# Generated outputs and backups
+
+
+
+
+
+local_backups/
+
+
+wandb/
+
+
+preprocessing_audit_*/
+
+
+target_visual_audit_*/
+
+
+
+
+
+# Automatically generated runtime scripts
+
+
+transformer/scripts/_runtime_*.py
+
+
+
+
+
+# OS files
+
+
+.DS_Store
+
+
+
+
+
+# Generated experiment outputs and checkpoints
+
+output/
+
+
+
+
+# Large pretrained and fine-tuned baseline model weights
+
+baselines/xview2_winners/**/weights/
+
+
+
+
+# Generated baseline predictions and target masks
+
+baselines/xview2_winners/oof_preds/
+

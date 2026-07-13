@@ -1,0 +1,136 @@
+import json
+import random
+import shutil
+from pathlib import Path
+import cv2
+
+random.seed(42)
+
+# Dataset root
+RAW_ROOT = Path("/homes/j244s673/documents/wsu/phd/STVINCENT-VOLCANO")
+
+# This handles both possible structures:
+# 1) DATASET/images and DATASET/masks
+# 2) DATASET/data/images and DATASET/data/masks
+if (RAW_ROOT / "images").exists() and (RAW_ROOT / "masks").exists():
+    DATA_ROOT = RAW_ROOT
+elif (RAW_ROOT / "data" / "images").exists() and (RAW_ROOT / "data" / "masks").exists():
+    DATA_ROOT = RAW_ROOT / "data"
+else:
+    raise FileNotFoundError(
+        "Could not find images/ and masks/ folders. "
+        "Expected either DATASET/images and DATASET/masks "
+        "or DATASET/data/images and DATASET/data/masks."
+    )
+
+IMG_DIR = DATA_ROOT / "images"
+MSK_DIR = DATA_ROOT / "masks"
+
+# Output folder
+OUT_ROOT = Path("/homes/j244s673/documents/wsu/phd/stvincent_volcano_preprocessed")
+
+# Create output folders
+for split in ["train", "val", "test"]:
+    for sub in ["images", "masks", "targets"]:
+        (OUT_ROOT / split / sub).mkdir(parents=True, exist_ok=True)
+
+
+def collect_pairs():
+    pairs = []
+
+    for pre_path in sorted(IMG_DIR.glob("*_pre_disaster.png")):
+        stem = pre_path.stem.replace("_pre_disaster", "")
+
+        try:
+            event, patch_id = stem.rsplit("_", 1)
+        except ValueError:
+            print(f"Skipping file with unexpected name format: {pre_path.name}")
+            continue
+
+        post_img = IMG_DIR / f"{event}_{patch_id}_post_disaster.png"
+        pre_msk = MSK_DIR / f"{event}_{patch_id}_pre_disaster.png"
+        post_msk = MSK_DIR / f"{event}_{patch_id}_post_disaster.png"
+
+        if post_img.exists() and pre_msk.exists() and post_msk.exists():
+            pairs.append((event, patch_id))
+        else:
+            print(f"Skipping incomplete pair: {event}_{patch_id}")
+
+    return pairs
+
+
+def summarize_sample(event: str, patch_id: str, subset: str):
+    post_mask_path = OUT_ROOT / subset / "masks" / f"{event}_{patch_id}_post_disaster.png"
+
+    m = cv2.imread(str(post_mask_path), cv2.IMREAD_UNCHANGED)
+
+    if m is None:
+        raise FileNotFoundError(f"Could not read {post_mask_path}")
+
+    return {
+        "event": event,
+        "patch_id": patch_id,
+        "subset": subset,
+        "loc": int((m > 0).sum() > 0),
+        "cls_1": int((m == 1).sum() > 0),
+        "cls_2": int((m == 2).sum() > 0),
+        "cls_3": int((m == 3).sum() > 0),
+        "cls_4": int((m == 4).sum() > 0),
+    }
+
+
+pairs = collect_pairs()
+print(f"Found {len(pairs)} valid pre/post pairs.")
+
+random.shuffle(pairs)
+
+n = len(pairs)
+n_train = int(0.8 * n)
+n_val = int(0.1 * n)
+
+split_map = {
+    "train": pairs[:n_train],
+    "val": pairs[n_train:n_train + n_val],
+    "test": pairs[n_train + n_val:],
+}
+
+metadata = {}
+
+for split, split_pairs in split_map.items():
+    patch_entries = []
+
+    for event, patch_id in split_pairs:
+        # Copy paired images
+        for suffix in ["pre", "post"]:
+            img_name = f"{event}_{patch_id}_{suffix}_disaster.png"
+            src = IMG_DIR / img_name
+            dst = OUT_ROOT / split / "images" / img_name
+            shutil.copy2(src, dst)
+
+        # Copy paired masks
+        for suffix in ["pre", "post"]:
+            msk_name = f"{event}_{patch_id}_{suffix}_disaster.png"
+            src = MSK_DIR / msk_name
+            dst = OUT_ROOT / split / "masks" / msk_name
+            shutil.copy2(src, dst)
+
+        # Create target files from masks
+        shutil.copy2(
+            MSK_DIR / f"{event}_{patch_id}_pre_disaster.png",
+            OUT_ROOT / split / "targets" / f"{event}_{patch_id}_pre_disaster_target.png",
+        )
+
+        shutil.copy2(
+            MSK_DIR / f"{event}_{patch_id}_post_disaster.png",
+            OUT_ROOT / split / "targets" / f"{event}_{patch_id}_post_disaster_target.png",
+        )
+
+        patch_entries.append(summarize_sample(event, patch_id, split))
+
+    metadata[split] = {"patches": patch_entries}
+    print(f"{split}: {len(patch_entries)} samples")
+
+with open(OUT_ROOT / "metadata.json", "w") as f:
+    json.dump(metadata, f, indent=2)
+
+print(f"Prepared St Vincent Volcano dataset at: {OUT_ROOT}")

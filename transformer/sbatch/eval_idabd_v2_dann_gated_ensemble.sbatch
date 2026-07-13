@@ -37,7 +37,7 @@ BASE_PHASE1=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_i
 BASE_PHASE2=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_idabd_hrtbda_v2_cascaded_phase1mask_80_10_10/checkpoints/phase2_best.pt
 
 DANN_PHASE1=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_plus_tier3_test_xbd_hrtbda_v2_4branch_warmup_amp/checkpoints/phase1_best.pt
-DANN_PHASE2=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_xbd_to_idabd_hrtbda_v5_foreground_dann/checkpoints/phase2_best_da.pt
+DANN_PHASE2=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/train_xbd_to_idabd_hrtbda_v5_foreground_dann_GENTLE/checkpoints/phase2_best_da.pt
 
 OUTPUT_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/eval_idabd_v2_plus_dann_gated_ensemble
 mkdir -p "$OUTPUT_DIR" "$OUTPUT_DIR/scores"

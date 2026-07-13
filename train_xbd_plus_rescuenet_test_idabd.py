@@ -273,9 +273,14 @@ class RescueSample:
 
 class RescueNetXBDDataset(BaseDamageDataset):
     """
-    Supports either:
-      split/images/... and split/masks/{localization,damage}/...
-    or images directly under split/ with masks under split/masks/...
+    Expected RescueNet-xBD layout:
+      root/
+        train|val|test/
+          images/*.jpg|png
+          masks/localization/*.png
+          masks/damage/*.png
+
+    Matching is done by file stem.
     """
 
     def __init__(self, root: str | Path, split: str, image_size: int, training: bool, conditioning_id: int = 0):
@@ -283,55 +288,36 @@ class RescueNetXBDDataset(BaseDamageDataset):
         self.root = Path(root)
         self.split = split
         self.split_root = self.root / split
+        self.images_dir = self.split_root / "images"
         self.loc_dir = self.split_root / "masks" / "localization"
         self.dmg_dir = self.split_root / "masks" / "damage"
 
+        if not self.images_dir.exists():
+            raise FileNotFoundError(f"Expected images dir not found: {self.images_dir}")
         if not self.loc_dir.exists():
             raise FileNotFoundError(f"Expected localization dir not found: {self.loc_dir}")
         if not self.dmg_dir.exists():
             raise FileNotFoundError(f"Expected damage dir not found: {self.dmg_dir}")
-
-        candidate_img_root = self.split_root / "images"
-        self.image_root = candidate_img_root if candidate_img_root.exists() else self.split_root
 
         self.samples = self._collect_samples()
         if not self.samples:
             raise RuntimeError(f"No RescueNet-xBD samples found under {self.split_root}")
 
     def _collect_samples(self) -> List[RescueSample]:
-        image_files = []
-
-        for p in self.image_root.rglob("*"):
-            if not is_img(p):
-                continue
-            if "masks" in p.parts:
-                continue
-            image_files.append(p)
-
-        image_files = sorted(image_files)
+        image_files = sorted([p for p in self.images_dir.iterdir() if is_img(p)], key=lambda p: p.stem)
         samples: List[RescueSample] = []
 
         for image_path in image_files:
-            rel = image_path.relative_to(self.image_root)
-            loc_path = self.loc_dir / rel
-            dmg_path = self.dmg_dir / rel
-
-            if not loc_path.exists():
-                stem_matches = list(self.loc_dir.rglob(image_path.name))
-                if len(stem_matches) == 1:
-                    loc_path = stem_matches[0]
-
-            if not dmg_path.exists():
-                stem_matches = list(self.dmg_dir.rglob(image_path.name))
-                if len(stem_matches) == 1:
-                    dmg_path = stem_matches[0]
+            stem = image_path.stem
+            loc_path = self.loc_dir / f"{stem}.png"
+            dmg_path = self.dmg_dir / f"{stem}.png"
 
             if not loc_path.exists() or not dmg_path.exists():
                 continue
 
             samples.append(
                 RescueSample(
-                    stem=image_path.stem,
+                    stem=stem,
                     image_path=image_path,
                     loc_path=loc_path,
                     dmg_path=dmg_path,

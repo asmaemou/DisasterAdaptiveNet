@@ -1,0 +1,399 @@
+FIRST-PLACE SOLUTION: scripts and weights
+================================================
+First-place repo:
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place
+total 494K
+-rw-r--r-- 1 j244s673 j244s673_users 3.4K Jul  2 12:15 adamw.py
+-rw-r--r-- 1 j244s673 j244s673_users 2.6K Jul  2 12:15 create_masks.py
+-rw-r--r-- 1 j244s673 j244s673_users 2.9K Jul  2 12:15 create_submission.py
+drwxr-xr-x 4 j244s673 j244s673_users   16 Jul  2 12:15 evalution-docker-container
+-rw-r--r-- 1 j244s673 j244s673_users 1.1K Jul  2 12:15 LICENSE
+-rw-r--r-- 1 j244s673 j244s673_users 9.1K Jul  2 12:15 losses.py
+-rw-r--r-- 1 j244s673 j244s673_users 3.4K Jul  2 12:15 predict154cls.py
+-rw-r--r-- 1 j244s673 j244s673_users 3.0K Jul  2 12:15 predict154_loc.py
+-rw-r--r-- 1 j244s673 j244s673_users 3.3K Jul  2 12:15 predict34cls.py
+-rw-r--r-- 1 j244s673 j244s673_users 3.0K Jul  2 12:15 predict34_loc.py
+-rw-r--r-- 1 j244s673 j244s673_users 3.4K Jul  2 12:15 predict50cls.py
+-rw-r--r-- 1 j244s673 j244s673_users 3.0K Jul  2 12:15 predict50_loc.py
+-rw-r--r-- 1 j244s673 j244s673_users 3.5K Jul  2 12:15 predict92cls.py
+-rw-r--r-- 1 j244s673 j244s673_users 3.0K Jul  2 12:15 predict92_loc.py
+-rw-r--r-- 1 j244s673 j244s673_users 5.8K Jul  2 12:15 predict_loc_val.py
+-rw-r--r-- 1 j244s673 j244s673_users  466 Jul  2 12:15 predict.sh
+-rw-r--r-- 1 j244s673 j244s673_users 5.4K Jul  2 12:15 README.md
+-rw-r--r-- 1 j244s673 j244s673_users  19K Jul  2 12:15 train154_cls_cce.py
+-rw-r--r-- 1 j244s673 j244s673_users  10K Jul  2 12:15 train154_loc.py
+-rw-r--r-- 1 j244s673 j244s673_users  18K Jul  2 12:15 train34_cls.py
+-rw-r--r-- 1 j244s673 j244s673_users 9.8K Jul  2 12:15 train34_loc.py
+-rw-r--r-- 1 j244s673 j244s673_users  19K Jul  2 12:15 train50_cls_cce.py
+-rw-r--r-- 1 j244s673 j244s673_users  10K Jul  2 12:15 train50_loc.py
+-rw-r--r-- 1 j244s673 j244s673_users  19K Jul  2 12:15 train92_cls_cce.py
+-rw-r--r-- 1 j244s673 j244s673_users  10K Jul  2 12:15 train92_loc.py
+-rw-r--r-- 1 j244s673 j244s673_users 1.8K Jul  2 12:15 train.sh
+-rw-r--r-- 1 j244s673 j244s673_users  19K Jul  2 12:15 tune154_cls_cce.py
+-rw-r--r-- 1 j244s673 j244s673_users  18K Jul  2 12:15 tune34_cls.py
+-rw-r--r-- 1 j244s673 j244s673_users  19K Jul  2 12:15 tune50_cls_cce.py
+-rw-r--r-- 1 j244s673 j244s673_users  11K Jul  2 12:15 tune50_loc.py
+-rw-r--r-- 1 j244s673 j244s673_users  19K Jul  2 12:15 tune92_cls_cce.py
+-rw-r--r-- 1 j244s673 j244s673_users  11K Jul  2 12:15 tune92_loc.py
+-rw-r--r-- 1 j244s673 j244s673_users 4.6K Jul  2 12:15 utils.py
+drwxr-xr-x 3 j244s673 j244s673_users   10 Jul  3 10:12 weights
+drwxr-xr-x 2 j244s673 j244s673_users    6 Jul  2 12:15 zoo
+First-place weights:
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/dpn92_cls_cce_0_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/dpn92_cls_cce_1_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/dpn92_cls_cce_2_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/dpn92_loc_0_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/dpn92_loc_1_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/dpn92_loc_2_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/res34_cls2_0_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/res34_cls2_1_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/res34_cls2_2_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/res34_loc_0_1_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/res34_loc_1_1_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/res34_loc_2_1_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/res50_cls_cce_0_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/res50_cls_cce_1_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/res50_cls_cce_2_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/res50_loc_0_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/res50_loc_1_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/res50_loc_2_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/se154_cls_cce_0_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/se154_cls_cce_1_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/se154_cls_cce_2_tuned_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/se154_loc_0_1_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/se154_loc_1_1_best
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/weights/extracted_weights/weights/se154_loc_2_1_best
+Possible train/finetune/predict scripts:
+./create_submission.py
+./evalution-docker-container/create_submission.py
+./evalution-docker-container/predict154cls.py
+./evalution-docker-container/predict154_loc.py
+./evalution-docker-container/predict34cls.py
+./evalution-docker-container/predict34_loc.py
+./evalution-docker-container/predict50cls.py
+./evalution-docker-container/predict50_loc.py
+./evalution-docker-container/predict92cls.py
+./evalution-docker-container/predict92_loc.py
+./evalution-docker-container/predict.sh
+./predict154cls.py
+./predict154_loc.py
+./predict34cls.py
+./predict34_loc.py
+./predict50cls.py
+./predict50_loc.py
+./predict92cls.py
+./predict92_loc.py
+./predict_loc_val.py
+./predict.sh
+./train154_cls_cce.py
+./train154_loc.py
+./train34_cls.py
+./train34_loc.py
+./train50_cls_cce.py
+./train50_loc.py
+./train92_cls_cce.py
+./train92_loc.py
+./train.sh
+Search for argparse/sys.argv in first-place scripts:
+./tune154_cls_cce.py:49:models_folder = 'weights'
+./tune154_cls_cce.py:425:    seed = int(sys.argv[1])
+./tune154_cls_cce.py:426:    # vis_dev = sys.argv[2]
+./tune154_cls_cce.py:483:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./tune154_cls_cce.py:484:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./tune154_cls_cce.py:485:    loaded_dict = checkpoint['state_dict']
+./tune154_cls_cce.py:492:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./tune154_cls_cce.py:493:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./tune154_cls_cce.py:496:    del checkpoint
+./tune34_cls.py:49:models_folder = 'weights'
+./tune34_cls.py:419:    seed = int(sys.argv[1])
+./tune34_cls.py:420:    # vis_dev = sys.argv[2]
+./tune34_cls.py:477:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./tune34_cls.py:478:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./tune34_cls.py:479:    loaded_dict = checkpoint['state_dict']
+./tune34_cls.py:486:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./tune34_cls.py:487:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./tune34_cls.py:490:    del checkpoint
+./tune50_cls_cce.py:49:models_folder = 'weights'
+./tune50_cls_cce.py:425:    seed = int(sys.argv[1])
+./tune50_cls_cce.py:426:    # vis_dev = sys.argv[2]
+./tune50_cls_cce.py:483:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./tune50_cls_cce.py:484:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./tune50_cls_cce.py:485:    loaded_dict = checkpoint['state_dict']
+./tune50_cls_cce.py:492:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./tune50_cls_cce.py:493:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./tune50_cls_cce.py:496:    del checkpoint
+./losses.py:84:    def __init__(self, weights, per_image=False):
+./losses.py:86:        self.weights = weights
+./losses.py:104:        weights = self.weights
+./losses.py:106:        for k, v in weights.items():
+./losses.py:111:            loss += self.weights[k] * val
+./train92_cls_cce.py:49:models_folder = 'weights'
+./train92_cls_cce.py:424:    seed = int(sys.argv[1])
+./train92_cls_cce.py:425:    # vis_dev = sys.argv[2]
+./train92_cls_cce.py:483:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./train92_cls_cce.py:484:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./train92_cls_cce.py:485:    loaded_dict = checkpoint['state_dict']
+./train92_cls_cce.py:492:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./train92_cls_cce.py:493:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./train92_cls_cce.py:496:    del checkpoint
+./train34_cls.py:49:models_folder = 'weights'
+./train34_cls.py:417:    seed = int(sys.argv[1])
+./train34_cls.py:418:    # vis_dev = sys.argv[2]
+./train34_cls.py:475:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./train34_cls.py:476:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./train34_cls.py:477:    loaded_dict = checkpoint['state_dict']
+./train34_cls.py:484:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./train34_cls.py:485:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./train34_cls.py:488:    del checkpoint
+./predict34_loc.py:30:models_folder = 'weights'
+./predict34_loc.py:38:    # os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1]
+./predict34_loc.py:48:        print("=> loading checkpoint '{}'".format(snap_to_load))
+./predict34_loc.py:49:        checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./predict34_loc.py:50:        loaded_dict = checkpoint['state_dict']
+./predict34_loc.py:57:        print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./predict34_loc.py:58:                .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./train34_loc.py:45:models_folder = 'weights'
+./train34_loc.py:278:    seed = int(sys.argv[1])
+./train34_loc.py:279:    # vis_dev = sys.argv[2]
+./predict50cls.py:28:models_folder = 'weights'
+./predict50cls.py:33:    seed = int(sys.argv[1])
+./predict50cls.py:34:    # vis_dev = sys.argv[2]
+./predict50cls.py:52:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./predict50cls.py:53:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./predict50cls.py:54:    loaded_dict = checkpoint['state_dict']
+./predict50cls.py:61:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./predict50cls.py:62:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./utils.py:7:    res = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]), borderMode=cv2.BORDER_REFLECT_101)
+./utils.py:13:    result = cv2.warpAffine(image, rot_mat, (image.shape[1], image.shape[0]), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101) #INTER_NEAREST
+./tune92_loc.py:49:models_folder = 'weights'
+./tune92_loc.py:283:    seed = int(sys.argv[1])
+./tune92_loc.py:284:    # vis_dev = sys.argv[2]
+./tune92_loc.py:325:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./tune92_loc.py:326:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./tune92_loc.py:327:    loaded_dict = checkpoint['state_dict']
+./tune92_loc.py:334:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./tune92_loc.py:335:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./tune92_loc.py:338:    del checkpoint
+./predict34cls.py:29:models_folder = 'weights'
+./predict34cls.py:34:    seed = int(sys.argv[1])
+./predict34cls.py:35:    # vis_dev = sys.argv[2]
+./predict34cls.py:50:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./predict34cls.py:51:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./predict34cls.py:52:    loaded_dict = checkpoint['state_dict']
+./predict34cls.py:59:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./predict34cls.py:60:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./zoo/senet.py:362:        # To preserve compatibility with Caffe weights `ceil_mode=True`
+./zoo/senet.py:408:        self._initialize_weights()
+./zoo/senet.py:430:    def _initialize_weights(self):
+./zoo/models.py:90:        self._initialize_weights()
+./zoo/models.py:136:    def _initialize_weights(self):
+./zoo/models.py:167:        self._initialize_weights()
+./zoo/models.py:223:    def _initialize_weights(self):
+./zoo/models.py:253:        self._initialize_weights()
+./zoo/models.py:308:    def _initialize_weights(self):
+./zoo/models.py:338:        self._initialize_weights()
+./zoo/models.py:404:    def _initialize_weights(self):
+./zoo/models.py:434:        self._initialize_weights()
+./zoo/models.py:478:    def _initialize_weights(self):
+./zoo/models.py:508:        self._initialize_weights()
+./zoo/models.py:558:    def _initialize_weights(self):
+./zoo/models.py:588:        self._initialize_weights()
+./zoo/models.py:633:    def _initialize_weights(self):
+./zoo/models.py:663:        self._initialize_weights()
+./zoo/models.py:716:    def _initialize_weights(self):
+./zoo/dpn.py:7:This implementation is compatible with the pretrained weights
+./tune50_loc.py:49:models_folder = 'weights'
+./tune50_loc.py:282:    seed = int(sys.argv[1])
+./tune50_loc.py:283:    # vis_dev = sys.argv[2]
+./tune50_loc.py:324:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./tune50_loc.py:325:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./tune50_loc.py:326:    loaded_dict = checkpoint['state_dict']
+./tune50_loc.py:333:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./tune50_loc.py:334:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./tune50_loc.py:337:    del checkpoint
+./train154_loc.py:47:models_folder = 'weights'
+./train154_loc.py:283:    seed = int(sys.argv[1])
+./train154_loc.py:284:    # vis_dev = sys.argv[2]
+./evalution-docker-container/predict50cls.py:27:models_folder = 'weights' #/work/
+./evalution-docker-container/predict50cls.py:32:    seed = int(sys.argv[1])
+./evalution-docker-container/predict50cls.py:34:    pre_file = sys.argv[2]
+./evalution-docker-container/predict50cls.py:35:    post_file = sys.argv[3]
+./evalution-docker-container/predict50cls.py:36:    loc_pred_file = sys.argv[4]
+./evalution-docker-container/predict50cls.py:37:    cls_pred_file = sys.argv[5]
+./evalution-docker-container/predict50cls.py:50:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./evalution-docker-container/predict50cls.py:51:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./evalution-docker-container/predict50cls.py:52:    loaded_dict = checkpoint['state_dict']
+./evalution-docker-container/predict50cls.py:59:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./evalution-docker-container/predict50cls.py:60:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./evalution-docker-container/predict154cls.py:29:models_folder = 'weights' #/work/
+./evalution-docker-container/predict154cls.py:34:    seed = int(sys.argv[1])
+./evalution-docker-container/predict154cls.py:36:    pre_file = sys.argv[2]
+./evalution-docker-container/predict154cls.py:37:    post_file = sys.argv[3]
+./evalution-docker-container/predict154cls.py:38:    loc_pred_file = sys.argv[4]
+./evalution-docker-container/predict154cls.py:39:    cls_pred_file = sys.argv[5]
+./evalution-docker-container/predict154cls.py:52:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./evalution-docker-container/predict154cls.py:53:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./evalution-docker-container/predict154cls.py:54:    loaded_dict = checkpoint['state_dict']
+./evalution-docker-container/predict154cls.py:61:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./evalution-docker-container/predict154cls.py:62:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./evalution-docker-container/predict154cls.py:69:    del checkpoint
+./evalution-docker-container/predict92_loc.py:29:models_folder = 'weights' #/work/
+./evalution-docker-container/predict92_loc.py:34:    pre_file = sys.argv[1]
+./evalution-docker-container/predict92_loc.py:35:    post_file = sys.argv[2]
+./evalution-docker-container/predict92_loc.py:36:    loc_pred_file = sys.argv[3]
+./evalution-docker-container/predict92_loc.py:37:    cls_pred_file = sys.argv[4]
+./evalution-docker-container/predict92_loc.py:47:        print("=> loading checkpoint '{}'".format(snap_to_load))
+./evalution-docker-container/predict92_loc.py:48:        checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./evalution-docker-container/predict92_loc.py:49:        loaded_dict = checkpoint['state_dict']
+./evalution-docker-container/predict92_loc.py:56:        print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./evalution-docker-container/predict92_loc.py:57:                .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./evalution-docker-container/predict92_loc.py:63:        del checkpoint
+./evalution-docker-container/predict154_loc.py:29:models_folder = 'weights' #/work/
+./evalution-docker-container/predict154_loc.py:34:    pre_file = sys.argv[1]
+./evalution-docker-container/predict154_loc.py:35:    post_file = sys.argv[2]
+./evalution-docker-container/predict154_loc.py:36:    loc_pred_file = sys.argv[3]
+./evalution-docker-container/predict154_loc.py:37:    cls_pred_file = sys.argv[4]
+./evalution-docker-container/predict154_loc.py:48:        print("=> loading checkpoint '{}'".format(snap_to_load))
+./evalution-docker-container/predict154_loc.py:49:        checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./evalution-docker-container/predict154_loc.py:50:        loaded_dict = checkpoint['state_dict']
+./evalution-docker-container/predict154_loc.py:57:        print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./evalution-docker-container/predict154_loc.py:58:                .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./evalution-docker-container/predict154_loc.py:64:        del checkpoint
+./evalution-docker-container/create_submission.py:32:    pre_file = sys.argv[1]
+./evalution-docker-container/create_submission.py:33:    post_file = sys.argv[2]
+./evalution-docker-container/create_submission.py:34:    loc_pred_file = sys.argv[3]
+./evalution-docker-container/create_submission.py:35:    cls_pred_file = sys.argv[4]
+./evalution-docker-container/predict50_loc.py:27:models_folder = 'weights' #/work/
+./evalution-docker-container/predict50_loc.py:32:    pre_file = sys.argv[1]
+./evalution-docker-container/predict50_loc.py:33:    post_file = sys.argv[2]
+./evalution-docker-container/predict50_loc.py:34:    loc_pred_file = sys.argv[3]
+./evalution-docker-container/predict50_loc.py:35:    cls_pred_file = sys.argv[4]
+./evalution-docker-container/predict50_loc.py:46:        print("=> loading checkpoint '{}'".format(snap_to_load))
+./evalution-docker-container/predict50_loc.py:47:        checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./evalution-docker-container/predict50_loc.py:48:        loaded_dict = checkpoint['state_dict']
+./evalution-docker-container/predict50_loc.py:55:        print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./evalution-docker-container/predict50_loc.py:56:                .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./evalution-docker-container/predict92cls.py:29:models_folder = 'weights' #/work/
+./evalution-docker-container/predict92cls.py:34:    seed = int(sys.argv[1])
+./evalution-docker-container/predict92cls.py:36:    pre_file = sys.argv[2]
+./evalution-docker-container/predict92cls.py:37:    post_file = sys.argv[3]
+./evalution-docker-container/predict92cls.py:38:    loc_pred_file = sys.argv[4]
+./evalution-docker-container/predict92cls.py:39:    cls_pred_file = sys.argv[5]
+./evalution-docker-container/predict92cls.py:52:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./evalution-docker-container/predict92cls.py:53:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./evalution-docker-container/predict92cls.py:54:    loaded_dict = checkpoint['state_dict']
+./evalution-docker-container/predict92cls.py:61:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./evalution-docker-container/predict92cls.py:62:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./evalution-docker-container/predict92cls.py:69:    del checkpoint
+./evalution-docker-container/zoo/dpn.py:7:This implementation is compatible with the pretrained weights
+./evalution-docker-container/zoo/senet.py:362:        # To preserve compatibility with Caffe weights `ceil_mode=True`
+./evalution-docker-container/zoo/senet.py:408:        self._initialize_weights()
+./evalution-docker-container/zoo/senet.py:430:    def _initialize_weights(self):
+./evalution-docker-container/zoo/models.py:90:        self._initialize_weights()
+./evalution-docker-container/zoo/models.py:136:    def _initialize_weights(self):
+./evalution-docker-container/zoo/models.py:167:        self._initialize_weights()
+./evalution-docker-container/zoo/models.py:223:    def _initialize_weights(self):
+./evalution-docker-container/zoo/models.py:253:        self._initialize_weights()
+./evalution-docker-container/zoo/models.py:308:    def _initialize_weights(self):
+./evalution-docker-container/zoo/models.py:338:        self._initialize_weights()
+./evalution-docker-container/zoo/models.py:404:    def _initialize_weights(self):
+./evalution-docker-container/zoo/models.py:434:        self._initialize_weights()
+./evalution-docker-container/zoo/models.py:478:    def _initialize_weights(self):
+./evalution-docker-container/zoo/models.py:508:        self._initialize_weights()
+./evalution-docker-container/zoo/models.py:558:    def _initialize_weights(self):
+./evalution-docker-container/zoo/models.py:588:        self._initialize_weights()
+./evalution-docker-container/zoo/models.py:633:    def _initialize_weights(self):
+./evalution-docker-container/zoo/models.py:663:        self._initialize_weights()
+./evalution-docker-container/zoo/models.py:716:    def _initialize_weights(self):
+./evalution-docker-container/predict34cls.py:27:models_folder = 'weights' #/work/
+./evalution-docker-container/predict34cls.py:32:    seed = int(sys.argv[1])
+./evalution-docker-container/predict34cls.py:34:    pre_file = sys.argv[2]
+./evalution-docker-container/predict34cls.py:35:    post_file = sys.argv[3]
+./evalution-docker-container/predict34cls.py:36:    loc_pred_file = sys.argv[4]
+./evalution-docker-container/predict34cls.py:37:    cls_pred_file = sys.argv[5]
+./evalution-docker-container/predict34cls.py:50:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./evalution-docker-container/predict34cls.py:51:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./evalution-docker-container/predict34cls.py:52:    loaded_dict = checkpoint['state_dict']
+./evalution-docker-container/predict34cls.py:59:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./evalution-docker-container/predict34cls.py:60:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./evalution-docker-container/predict34_loc.py:27:models_folder = 'weights' #/work/
+./evalution-docker-container/predict34_loc.py:32:    pre_file = sys.argv[1]
+./evalution-docker-container/predict34_loc.py:33:    post_file = sys.argv[2]
+./evalution-docker-container/predict34_loc.py:34:    loc_pred_file = sys.argv[3]
+./evalution-docker-container/predict34_loc.py:35:    cls_pred_file = sys.argv[4]
+./evalution-docker-container/predict34_loc.py:46:        print("=> loading checkpoint '{}'".format(snap_to_load))
+./evalution-docker-container/predict34_loc.py:47:        checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./evalution-docker-container/predict34_loc.py:48:        loaded_dict = checkpoint['state_dict']
+./evalution-docker-container/predict34_loc.py:55:        print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./evalution-docker-container/predict34_loc.py:56:                .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./train92_loc.py:47:models_folder = 'weights'
+./train92_loc.py:284:    seed = int(sys.argv[1])
+./train92_loc.py:285:    # vis_dev = sys.argv[2]
+./train154_cls_cce.py:49:models_folder = 'weights'
+./train154_cls_cce.py:424:    seed = int(sys.argv[1])
+./train154_cls_cce.py:425:    # vis_dev = sys.argv[2]
+./train154_cls_cce.py:484:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./train154_cls_cce.py:485:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./train154_cls_cce.py:486:    loaded_dict = checkpoint['state_dict']
+./train154_cls_cce.py:493:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./train154_cls_cce.py:494:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./train154_cls_cce.py:497:    del checkpoint
+./predict_loc_val.py:33:models_folder = 'weights'
+./predict_loc_val.py:67:        print("=> loading checkpoint '{}'".format(snap_to_load))
+./predict_loc_val.py:68:        checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./predict_loc_val.py:69:        loaded_dict = checkpoint['state_dict']
+./predict_loc_val.py:76:        print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./predict_loc_val.py:77:                .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./predict_loc_val.py:86:        print("=> loading checkpoint '{}'".format(snap_to_load))
+./predict_loc_val.py:87:        checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./predict_loc_val.py:88:        loaded_dict = checkpoint['state_dict']
+./predict_loc_val.py:95:        print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./predict_loc_val.py:96:                .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./predict_loc_val.py:107:        print("=> loading checkpoint '{}'".format(snap_to_load))
+./predict_loc_val.py:108:        checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./predict_loc_val.py:109:        loaded_dict = checkpoint['state_dict']
+./predict_loc_val.py:116:        print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./predict_loc_val.py:117:                .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./predict_loc_val.py:128:        print("=> loading checkpoint '{}'".format(snap_to_load))
+./predict_loc_val.py:129:        checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./predict_loc_val.py:130:        loaded_dict = checkpoint['state_dict']
+./predict_loc_val.py:137:        print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./predict_loc_val.py:138:                .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./predict50_loc.py:30:models_folder = 'weights'
+./predict50_loc.py:38:    # os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1]
+./predict50_loc.py:48:        print("=> loading checkpoint '{}'".format(snap_to_load))
+./predict50_loc.py:49:        checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./predict50_loc.py:50:        loaded_dict = checkpoint['state_dict']
+./predict50_loc.py:57:        print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./predict50_loc.py:58:                .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./train50_cls_cce.py:49:models_folder = 'weights'
+./train50_cls_cce.py:424:    seed = int(sys.argv[1])
+./train50_cls_cce.py:425:    # vis_dev = sys.argv[2]
+./train50_cls_cce.py:482:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./train50_cls_cce.py:483:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./train50_cls_cce.py:484:    loaded_dict = checkpoint['state_dict']
+./train50_cls_cce.py:491:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./train50_cls_cce.py:492:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./train50_cls_cce.py:495:    del checkpoint
+./train50_loc.py:47:models_folder = 'weights'
+./train50_loc.py:283:    seed = int(sys.argv[1]) 
+./train50_loc.py:284:    # vis_dev = sys.argv[2]
+./predict92cls.py:30:models_folder = 'weights'
+./predict92cls.py:35:    seed = int(sys.argv[1])
+./predict92cls.py:36:    # vis_dev = sys.argv[2]
+./predict92cls.py:54:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./predict92cls.py:55:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./predict92cls.py:56:    loaded_dict = checkpoint['state_dict']
+./predict92cls.py:63:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./predict92cls.py:64:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./predict154cls.py:28:models_folder = 'weights'
+./predict154cls.py:33:    seed = int(sys.argv[1])
+./predict154cls.py:34:    # vis_dev = sys.argv[2]
+./predict154cls.py:52:    print("=> loading checkpoint '{}'".format(snap_to_load))
+./predict154cls.py:53:    checkpoint = torch.load(path.join(models_folder, snap_to_load), map_location='cpu')
+./predict154cls.py:54:    loaded_dict = checkpoint['state_dict']
+./predict154cls.py:61:    print("loaded checkpoint '{}' (epoch {}, best_score {})"
+./predict154cls.py:62:            .format(snap_to_load, checkpoint['epoch'], checkpoint['best_score']))
+./predict154_loc.py:29:models_folder = 'weights'
+================================================
+SECOND-PLACE SOLUTION: scripts and weights

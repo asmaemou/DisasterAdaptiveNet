@@ -59,6 +59,24 @@ import train_xbd_hrtbda_v5_multilabel_crop_cascade as v5
 # Reuse IDA-BD discovery/splitting utilities from the supervised fine-tune script.
 import train_idabd_xbdv5_supervised_finetune as idft
 
+
+def json_safe_default(o):
+    """Make torch/numpy/path objects safe for json.dump."""
+    if torch.is_tensor(o):
+        if o.numel() == 1:
+            return o.detach().cpu().item()
+        return o.detach().cpu().tolist()
+    if isinstance(o, np.ndarray):
+        return o.tolist()
+    if isinstance(o, (np.integer,)):
+        return int(o)
+    if isinstance(o, (np.floating,)):
+        return float(o)
+    if isinstance(o, Path):
+        return str(o)
+    return str(o)
+
+
 cv2.setNumThreads(0)
 cv2.ocl.setUseOpenCL(False)
 
@@ -485,7 +503,7 @@ def train_domain_adaptation(args: argparse.Namespace, device: torch.device) -> T
             "phase1_meta": phase1_meta,
             "phase2_meta": phase2_meta,
             "args": vars(args),
-        }, f, indent=2)
+        }, f, indent=2, default=json_safe_default)
 
     best_score = -1.0
     best_epoch = 0
@@ -754,10 +772,10 @@ def validation_ablation_and_final_test(
         writer.writeheader()
         writer.writerows(rows_sorted)
     with open(scores_dir / "validation_threshold_dilation_ablation_da.json", "w", encoding="utf-8") as f:
-        json.dump(rows_sorted, f, indent=2)
+        json.dump(rows_sorted, f, indent=2, default=json_safe_default)
 
     print("\n===== BEST VALIDATION SETTING =====", flush=True)
-    print(json.dumps(best, indent=2), flush=True)
+    print(json.dumps(best, indent=2, default=json_safe_default), flush=True)
     print("===================================", flush=True)
 
     test_res = v5.evaluate_phase2_cascade(
@@ -794,7 +812,7 @@ def validation_ablation_and_final_test(
     }
 
     with open(scores_dir / "summary_final_test_selected_by_validation_da.json", "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2)
+        json.dump(summary, f, indent=2, default=json_safe_default)
 
     lines = [
         "Experiment: xBD-to-IDA-BD unsupervised foreground-aware adversarial domain adaptation HRTBDA v5",

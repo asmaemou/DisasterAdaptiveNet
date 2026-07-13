@@ -1,0 +1,142 @@
+SECOND-PLACE SOLUTION: scripts and weights
+================================================
+Second-place repo:
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place
+total 487K
+drwxr-xr-x 2 j244s673 j244s673_users    4 Jul  2 12:15 assets
+-rw-r--r-- 1 j244s673 j244s673_users 6.9K Jul  2 12:15 augs.py
+drwxr-xr-x 2 j244s673 j244s673_users   11 Jul  2 12:15 configs
+drwxr-xr-x 2 j244s673 j244s673_users    4 Jul  2 12:15 dataset
+-rw-r--r-- 1 j244s673 j244s673_users 3.4K Jul  2 12:15 Dockerfile
+-rw-r--r-- 1 j244s673 j244s673_users 2.2K Jul  2 12:15 ensemble.py
+-rw-r--r-- 1 j244s673 j244s673_users 499K Jul  2 12:15 folds.csv
+-rw-r--r-- 1 j244s673 j244s673_users 2.6K Jul  2 12:15 generate_polygons.py
+-rw-r--r-- 1 j244s673 j244s673_users  12K Jul  2 12:15 LICENSE.txt
+drwxr-xr-x 2 j244s673 j244s673_users    3 Jul  2 12:15 logs
+-rw-r--r-- 1 j244s673 j244s673_users  11K Jul  2 12:15 losses.py
+drwxr-xr-x 2 j244s673 j244s673_users   11 Jul  2 12:15 models
+-rw-r--r-- 1 j244s673 j244s673_users 3.1K Jul  2 12:15 predict.py
+-rw-r--r-- 1 j244s673 j244s673_users 9.5K Jul  2 12:15 predict_single.py
+-rw-r--r-- 1 j244s673 j244s673_users 1.3K Jul  2 12:15 README.md
+-rw-r--r-- 1 j244s673 j244s673_users   84 Jul  2 12:15 run.sh
+drwxr-xr-x 2 j244s673 j244s673_users    9 Jul  2 12:15 tools
+-rw-r--r-- 1 j244s673 j244s673_users  13K Jul  2 12:15 train_localization.py
+-rw-r--r-- 1 j244s673 j244s673_users  15K Jul  2 12:15 train.py
+drwxr-xr-x 2 j244s673 j244s673_users   24 Jul  3 10:10 weights
+Second-place weights:
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/.gitkeep
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/localization_densenet_unet_densenet161_3_0_best_dice
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/localization_densenet_unet_densenet161_3_1_best_dice
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/localization_dpn_unet_dpn92_0_best_dice
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/localization_dpn_unet_dpn92_1_best_dice
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/localization_dpn_unet_dpn92_2_best_dice
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/localization_dpn_unet_dpn92_3_best_dice
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/pseudo_densenet_seamese_unet_shared_densenet161_0_best_xview
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/pseudo_densenet_seamese_unet_shared_densenet161_2_best_xview
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/pseudo_dpn_seamese_unet_shared_dpn92_0_best_xview
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/pseudo_dpn_seamese_unet_shared_dpn92_2_best_xview
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/pseudo_scseresnext_seamese_unet_shared_seresnext50_0_best_xview
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/pseudo_scseresnext_seamese_unet_shared_seresnext50_1_best_xview
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/pseudo_scseresnext_seamese_unet_shared_seresnext50_2_best_xview
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/pseudo_scseresnext_seamese_unet_shared_seresnext50_3_best_xview
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/sgd_resnext_seamese_unet_shared_resnext101_0_best_xview
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/softmax_densenet_seamese_unet_shared_densenet161_0_best_xview
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/softmax_densenet_seamese_unet_shared_densenet161_2_best_xview
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/softmax_dpn_seamese_unet_shared_dpn92_0_best_xview
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/softmax_dpn_seamese_unet_shared_dpn92_2_best_xview
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/softmax_sampling_efficient_seamese_unet_shared_efficientnet-b2_0_best_xview
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_second_place/weights/softmax_sampling_efficient_seamese_unet_shared_efficientnet-b2_1_best_xview
+Possible train/finetune/predict scripts:
+./predict.py
+./predict_single.py
+./train_localization.py
+./train.py
+Search for argparse/sys.argv in second-place scripts:
+./predict.py:1:import argparse
+./predict.py:20:    parser = argparse.ArgumentParser("Xview Predictor")
+./predict.py:21:    arg = parser.add_argument
+./predict.py:27:    arg('--model', type=str, default='weights2/spacenet_resnext_unet_resnext50_0_best_dice')
+./predict.py:38:    print("=> loading checkpoint '{}'".format(args.model))
+./predict.py:39:    checkpoint = torch.load(args.model, map_location="cpu")
+./predict.py:40:    model.load_state_dict(checkpoint['state_dict'])
+./train_localization.py:1:import argparse
+./train_localization.py:70:    parser = argparse.ArgumentParser("PyTorch Xview Pipeline")
+./train_localization.py:71:    arg = parser.add_argument
+./train_localization.py:75:    arg('--output-dir', type=str, default='weights/')
+./train_localization.py:76:    arg('--resume', type=str, default='')
+./train_localization.py:143:    if args.resume:
+./train_localization.py:144:        if os.path.isfile(args.resume):
+./train_localization.py:145:            print("=> loading checkpoint '{}'".format(args.resume))
+./train_localization.py:146:            checkpoint = torch.load(args.resume, map_location='cpu')
+./train_localization.py:147:            state_dict = checkpoint['state_dict']
+./train_localization.py:155:                start_epoch = checkpoint['epoch']
+./train_localization.py:157:                    dice_best = checkpoint.get('dice_best', 0)
+./train_localization.py:158:            print("=> loaded checkpoint '{}' (epoch {})"
+./train_localization.py:159:                  .format(args.resume, checkpoint['epoch']))
+./train_localization.py:161:            print("=> no checkpoint found at '{}'".format(args.resume))
+./losses.py:128:    def __init__(self, weights, per_image=False, only_target_pixels=False, skip_empty=False,
+./losses.py:129:                 channel_weights=np.ones((20,)), channel_losses=None,
+./losses.py:132:        self.weights = weights
+./losses.py:144:        self.channel_weights = channel_weights
+./losses.py:152:        weights = self.weights
+./losses.py:157:        for k, v in weights.items():
+./losses.py:169:                        val_channels.append(self.channel_weights[c] * self.mapping[k](
+./losses.py:186:            loss += self.weights[k] * val
+./augs.py:122:        cv2.warpAffine, M=M, dsize=(nW, nH), flags=interpolation, borderMode=border_mode, borderValue=value
+./tools/xview_metric.py:211:            if loc_dmg == 'localization':  # localization or damage is fine here
+./predict_single.py:1:import argparse
+./predict_single.py:22:weight_path = "weights"
+./predict_single.py:66:    checkpoint_path = os.path.join(weight_path, config.weight_path)
+./predict_single.py:67:    print("=> loading checkpoint '{}'".format(checkpoint_path))
+./predict_single.py:68:    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+./predict_single.py:69:    model.load_state_dict({k.replace("module.", ""): v for k, v in checkpoint['state_dict'].items()})
+./predict_single.py:135:    checkpoint_path = os.path.join(weight_path, config.weight_path)
+./predict_single.py:136:    print("=> loading checkpoint '{}'".format(checkpoint_path))
+./predict_single.py:137:    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+./predict_single.py:138:    model.load_state_dict({k[7:]: v for k, v in checkpoint['state_dict'].items()})
+./predict_single.py:221:    parser = argparse.ArgumentParser("Xview Predictor")
+./predict_single.py:222:    arg = parser.add_argument
+./models/densenet.py:31:        # They are also in the checkpoints in model_urls. This pattern is used
+./models/densenet.py:61:        # They are also in the checkpoints in model_urls. This pattern is used
+./models/densenet.py:91:        # They are also in the checkpoints in model_urls. This pattern is used
+./models/densenet.py:118:        # They are also in the checkpoints in model_urls. This pattern is used
+./models/siamese_unet.py:23:         # using weights from WSL
+./models/siamese_unet.py:149:    def _initialize_weights(self):
+./models/siamese_unet.py:213:        self._initialize_weights()
+./models/fpn.py:82:        _initialize_weights(self.fpn)
+./models/fpn.py:83:        _initialize_weights(self.final)
+./models/fpn.py:99:def _initialize_weights(module):
+./models/fpn.py:117:        _initialize_weights(self.fpn)
+./models/fpn.py:118:        _initialize_weights(self.final)
+./models/unet.py:72:          #using weights from WSL
+./models/unet.py:204:    def _initialize_weights(self):
+./models/unet.py:272:        self._initialize_weights()
+./models/dpn.py:7:This implementation is compatible with the pretrained weights
+./models/senet.py:367:        # To preserve compatibility with Caffe weights `ceil_mode=True`
+./models/senet.py:413:        self._initialize_weights()
+./models/senet.py:435:    def _initialize_weights(self):
+./models/irv.py:45:                                 affine=True)
+./train.py:1:import argparse
+./train.py:71:    parser = argparse.ArgumentParser("PyTorch Xview Pipeline")
+./train.py:72:    arg = parser.add_argument
+./train.py:76:    arg('--output-dir', type=str, default='weights/')
+./train.py:77:    arg('--resume', type=str, default='')
+./train.py:147:    if args.resume:
+./train.py:148:        if os.path.isfile(args.resume):
+./train.py:149:            print("=> loading checkpoint '{}'".format(args.resume))
+./train.py:150:            checkpoint = torch.load(args.resume, map_location='cpu')
+./train.py:151:            state_dict = checkpoint['state_dict']
+./train.py:159:                start_epoch = checkpoint['epoch']
+./train.py:161:                    dice_best = checkpoint.get('dice_best', 0)
+./train.py:162:                    xview_best = checkpoint.get('xview_best', 0)
+./train.py:163:            print("=> loaded checkpoint '{}' (epoch {})"
+./train.py:164:                  .format(args.resume, checkpoint['epoch']))
+./train.py:166:            print("=> no checkpoint found at '{}'".format(args.resume))
+./generate_polygons.py:3:import argparse
+./generate_polygons.py:55:    parser = argparse.ArgumentParser()
+./generate_polygons.py:56:    parser.add_argument('--input',
+./ensemble.py:1:import argparse
+./ensemble.py:60:    parser = argparse.ArgumentParser("Ensemble masks")
+./ensemble.py:61:    arg = parser.add_argument
+================================================
+THIRD-PLACE SOLUTION: scripts and weights

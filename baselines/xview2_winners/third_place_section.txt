@@ -1,0 +1,374 @@
+THIRD-PLACE SOLUTION: scripts and weights
+================================================
+Third-place repo:
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_third_place
+total 2.1M
+-rw-r--r-- 1 j244s673 j244s673_users  524 Jul  2 12:16 black.toml
+-rw-r--r-- 1 j244s673 j244s673_users  244 Jul  2 12:16 build_push_docker_37.cmd
+-rw-r--r-- 1 j244s673 j244s673_users 4.0K Jul  2 12:16 convert_crops.py
+-rw-r--r-- 1 j244s673 j244s673_users 2.7K Jul  2 12:16 convert_masks.py
+-rw-r--r-- 1 j244s673 j244s673_users  572 Jul  2 12:16 Dockerfile-pytorch14-37
+-rw-r--r-- 1 j244s673 j244s673_users  10K Jul  2 12:16 docker_submission_37.py
+-rw-r--r-- 1 j244s673 j244s673_users 3.6K Jul  2 12:16 evaluate_postprocessing.py
+-rw-r--r-- 1 j244s673 j244s673_users  21K Jul  2 12:16 finetune.py
+-rw-r--r-- 1 j244s673 j244s673_users  25K Jul  2 12:16 fit_predict.py
+-rw-r--r-- 1 j244s673 j244s673_users 1.1K Jul  2 12:16 LICENSE
+-rw-r--r-- 1 j244s673 j244s673_users 1.7K Jul  2 12:16 make_folds.py
+-rw-r--r-- 1 j244s673 j244s673_users 2.9K Jul  2 12:16 optimize_softmax.py
+-rw-r--r-- 1 j244s673 j244s673_users 9.1K Jul  2 12:16 predict_37_weighted.py
+-rw-r--r-- 1 j244s673 j244s673_users 3.9K Jul  2 12:16 predict_oof.py
+-rw-r--r-- 1 j244s673 j244s673_users 4.6K Jul  2 12:16 predict.py
+-rw-r--r-- 1 j244s673 j244s673_users 1.2K Jul  2 12:16 README.md
+-rw-r--r-- 1 j244s673 j244s673_users  387 Jul  2 12:16 requirements_docker_pytorch14.txt
+-rw-r--r-- 1 j244s673 j244s673_users  179 Jul  2 12:16 requirements.txt
+-rw-r--r-- 1 j244s673 j244s673_users  101 Jul  2 12:16 run_tensorboard_3389.sh
+-rw-r--r-- 1 j244s673 j244s673_users  121 Jul  2 12:16 run_tensorboard.cmd
+-rw-r--r-- 1 j244s673 j244s673_users  101 Jul  2 12:16 run_tensorboard.sh
+-rw-r--r-- 1 j244s673 j244s673_users 1.7K Jul  2 12:16 test_docker_pytorch14_37.cmd
+drwxr-xr-x 2 j244s673 j244s673_users   15 Jul  2 12:16 tests
+-rw-r--r-- 1 j244s673 j244s673_users 3.6M Jul  2 12:16 train.csv
+-rw-r--r-- 1 j244s673 j244s673_users 3.6M Jul  2 12:16 train_folds.csv
+-rw-r--r-- 1 j244s673 j244s673_users  12K Jul  2 12:16 train.sh
+drwxr-xr-x 3 j244s673 j244s673_users    5 Jul  3 10:17 weights
+drwxr-xr-x 4 j244s673 j244s673_users   22 Jul  2 12:16 xview
+Third-place weights:
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_third_place/weights/extracted/ensemble/Dec15_23_24_resnet34_unet_v2_512_fold3_crops.pth
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_third_place/weights/extracted/ensemble/Dec17_19_12_inceptionv4_fpncatv2_256_512_fold2_fp16_crops.pth
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_third_place/weights/extracted/ensemble/Dec19_06_18_resnet34_unet_v2_512_fold4_fp16_crops.pth
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_third_place/weights/extracted/ensemble/Dec21_11_50_seresnext50_unet_v2_512_fold3_fp16_crops.pth
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_third_place/weights/extracted/ensemble/Dec22_22_24_seresnext50_unet_v2_512_fold1_fp16_crops.pth
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_third_place/weights/extracted/ensemble/Dec27_14_08_densenet169_unet_v2_512_fold2_fp16_crops.pth
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_third_place/weights/extracted/ensemble/Dec27_14_37_resnet101_unet_v2_512_fold4_fp16_crops.pth
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_third_place/weights/extracted/ensemble/Dec30_15_34_resnet101_fpncatv2_256_512_fold0_fp16_pseudo_crops.pth
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_third_place/weights/extracted/ensemble/Dec30_15_34_resnet34_unet_v2_512_fold0_fp16_pseudo_crops.pth
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_third_place/weights/extracted/ensemble/Dec31_02_09_resnet34_unet_v2_512_fold1_fp16_pseudo_crops.pth
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_third_place/weights/extracted/ensemble/Dec31_03_55_densenet201_fpncatv2_256_512_fold1_fp16_pseudo_crops.pth
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_third_place/weights/extracted/ensemble/Dec31_12_45_resnet34_unet_v2_512_fold2_fp16_pseudo_crops.pth
+/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_third_place/weights/extracted/ensemble/Dec31_18_17_efficientb4_fpncatv2_256_512_fold3_fp16_pseudo_crops.pth
+Possible train/finetune/predict scripts:
+./docker_submission_37.py
+./finetune.py
+./fit_predict.py
+./predict_37_weighted.py
+./predict_oof.py
+./predict.py
+./tests/test_dataset.py
+./tests/test_load_mask.py
+./tests/test_models.py
+./tests/test_postprocessing.py
+./tests/test_registration.py
+./train.sh
+./weights/extracted/docker_submission_37.py
+./weights/extracted/finetune.py
+./weights/extracted/fit_predict.py
+./weights/extracted/predict_37_weighted.py
+./weights/extracted/predict_oof.py
+./weights/extracted/predict.py
+./weights/extracted/train.sh
+./xview/inference.py
+./xview/train_utils.py
+./xview/utils/inference_image_output.py
+./xview/utils/inference.sh
+Search for argparse/sys.argv in third-place scripts:
+./train.sh:4:# Train base models (no pseudolabeling, no optimized weights)
+./train.sh:46:python finetune.py --seed 330  -dd $XVIEW2_DATA_DIR -pl stage1_predictions_pseudolabeling  -x fold0_pl_resnet34_unet_v2 --model resnet34_unet_v2         --batch-size 64 --epochs 50 --learning-rate 0.0001 --criterion [['weighted_ce', '1']]                  -w 16 -a medium --fp16  --fold 0 --scheduler cos    -wd 0.0001  --only-buildings True  --crops True --post-transform True
+./train.sh:47:python finetune.py --seed 332  -dd $XVIEW2_DATA_DIR -pl stage1_predictions_pseudolabeling -x fold0_pl_resnet101_fpncatv2_256 --model resnet101_fpncatv2_256   --batch-size 48 --epochs 50 --learning-rate 0.0001 --criterion [['weighted_ce', '1']]                  -w 16 -a medium --fp16  --fold 0 --scheduler cos    -wd 0.0001  --only-buildings True  --crops True --post-transform True
+./train.sh:49:python finetune.py --seed 13   -dd $XVIEW2_DATA_DIR -pl stage1_predictions_pseudolabeling -x fold1_pl_seresnext50_unet_v2 --model seresnext50_unet_v2      --batch-size 32 --epochs 50 --learning-rate 0.0001  --criterion [['weighted_ce', '1'], ['focal', '1']]  -w 16 -a medium --fp16  --fold 1 --scheduler simple -wd 1e-05   --only-buildings True  --crops True --post-transform True
+./train.sh:50:python finetune.py --seed 331  -dd $XVIEW2_DATA_DIR -pl stage1_predictions_pseudolabeling -x fold1_pl_resnet34_unet_v2 --model resnet34_unet_v2         --batch-size 64 --epochs 50 --learning-rate 0.0001 --criterion [['weighted_ce', '1']]                  -w 16 -a medium --fp16  --fold 1 --scheduler cos    -wd 0.0001  --only-buildings True  --crops True --post-transform True
+./train.sh:51:python finetune.py --seed 1331 -dd $XVIEW2_DATA_DIR -pl stage1_predictions_pseudolabeling -x fold1_pl_densenet201_fpncatv2_256 --model densenet201_fpncatv2_256 --batch-size 32 --epochs 50 --learning-rate 0.0001 --criterion [['weighted_ce', '1']]                  -w 16 -a medium --fp16  --fold 1 --scheduler cos    -wd 0.0001  --only-buildings True  --crops True --post-transform True
+./train.sh:53:python finetune.py --seed 333  -dd $XVIEW2_DATA_DIR -pl stage1_predictions_pseudolabeling -x fold2_pl_inceptionv4_fpncatv2_256 --model inceptionv4_fpncatv2_256 --batch-size 48 --epochs 50 --learning-rate 0.001  --criterion [['weighted_ce', '1']]                  -w 16 -a medium --fp16  --fold 2 --scheduler poly   -wd 1e-05   --only-buildings True  --crops True --post-transform True
+./train.sh:54:python finetune.py --seed 303  -dd $XVIEW2_DATA_DIR -pl stage1_predictions_pseudolabeling -x fold2_pl_densenet169_unet_v2 --model densenet169_unet_v2      --batch-size 32 --epochs 50 --learning-rate 0.0001  --criterion [['ohem_ce', '1']]                      -w 16 -a medium --fp16  --fold 2 --scheduler simple -wd 1e-05   --only-buildings True  --crops True --post-transform True
+./train.sh:55:python finetune.py --seed 332  -dd $XVIEW2_DATA_DIR -pl stage1_predictions_pseudolabeling -x fold2_pl_resnet34_unet_v2 --model resnet34_unet_v2         --batch-size 64 --epochs 50 --learning-rate 0.0001 --criterion [['weighted_ce', '1']]                  -w 16 -a medium --fp16  --fold 2 --scheduler cos    -wd 0.0001  --only-buildings True  --crops True --post-transform True
+./train.sh:57:python finetune.py --seed 50   -dd $XVIEW2_DATA_DIR -pl stage1_predictions_pseudolabeling -x fold3_pl_resnet34_unet_v2 --model resnet34_unet_v2         --batch-size 16 --epochs 50 --learning-rate 0.0003 --criterion [['weighted_ce', '1']]                  -w 16 -a medium --fp16  --fold 3 --scheduler cos    -wd 1e-05   --only-buildings True  --crops True --post-transform True
+./train.sh:58:python finetune.py --seed 3    -dd $XVIEW2_DATA_DIR -pl stage1_predictions_pseudolabeling -x fold3_pl_seresnext50_unet_v2 --model seresnext50_unet_v2      --batch-size 32 --epochs 50 --learning-rate 0.0001  --criterion [['weighted_ce', '1'], ['focal', '1']]  -w 16 -a medium --fp16  --fold 3 --scheduler simple -wd 1e-05   --only-buildings True  --crops True --post-transform True
+./train.sh:59:python finetune.py --seed 3334 -dd $XVIEW2_DATA_DIR -pl stage1_predictions_pseudolabeling -x fold3_pl_efficientb4_fpncatv2_256 --model efficientb4_fpncatv2_256 --batch-size 32 --epochs 50 --learning-rate 0.0001 --criterion [['weighted_ce', '1']]                  -w 16 -a medium --fp16  --fold 3 --scheduler cos    -wd 0.0001  --only-buildings True  --crops True --post-transform True
+./train.sh:61:python finetune.py --seed 334  -dd $XVIEW2_DATA_DIR -pl stage1_predictions_pseudolabeling -x fold4_pl_resnet34_unet_v2 --model resnet34_unet_v2         --batch-size 64 --epochs 50 --learning-rate 0.0001  --criterion [['weighted_ce', '1']]                  -w 16 -a medium --fp16  --fold 4 --scheduler cos    -wd 1e-05   --only-buildings True  --crops True --post-transform True
+./train.sh:62:python finetune.py --seed 133  -dd $XVIEW2_DATA_DIR -pl stage1_predictions_pseudolabeling -x fold4_pl_resnet101_unet_v2 --model resnet101_unet_v2        --batch-size 40 --epochs 50 --learning-rate 0.0001  --criterion [['weighted_ce', '1'], ['focal', '1']]  -w 16 -a medium --fp16  --fold 4 --scheduler simple -wd 0.0001  --only-buildings True  --crops True --post-transform True
+./train.sh:65:# Make OOF predictions on fine-tuned models
+./train.sh:82:# Optimize per-class weights. As a result, you will get optimized_weights_%timestamp%.csv file 
+./train.sh:84:# Exhaustive search of optimal weights checkpoint may take up to several hours PER ONE checkpoint.
+./convert_crops.py:1:import argparse
+./convert_crops.py:102:    parser = argparse.ArgumentParser()
+./convert_crops.py:103:    parser.add_argument("-dd", "--data-dir", type=str, default="c:\\datasets\\xview2")
+./predict_37_weighted.py:1:import argparse
+./predict_37_weighted.py:9:    model_from_checkpoint,
+./predict_37_weighted.py:20:def weighted_model(checkpoint_fname: str, weights, activation: str):
+./predict_37_weighted.py:21:    model, info = model_from_checkpoint(fs.auto_file(checkpoint_fname, where="models"), activation_after=activation, report=False)
+./predict_37_weighted.py:22:    model = ApplyWeights(model, weights)
+./predict_37_weighted.py:27:    parser = argparse.ArgumentParser()
+./predict_37_weighted.py:28:    parser.add_argument("-o", "--output-dir", type=str, default="models/predict_37_weighted")
+./predict_37_weighted.py:29:    parser.add_argument("--tta", type=str, default=None)
+./predict_37_weighted.py:30:    parser.add_argument("-b", "--batch-size", type=int, default=1, help="Batch Size during training, e.g. -b 64")
+./predict_37_weighted.py:31:    parser.add_argument("-w", "--workers", type=int, default=0, help="")
+./predict_37_weighted.py:32:    parser.add_argument("-dd", "--data-dir", type=str, default="c:\\datasets\\xview2", help="Data directory")
+./predict_37_weighted.py:33:    parser.add_argument("-p", "--postprocessing", type=str, default=None)
+./predict_37_weighted.py:34:    parser.add_argument("--size", default=1024, type=int)
+./predict_37_weighted.py:35:    parser.add_argument("--activation", default="model", type=str)
+./predict_37_weighted.py:36:    parser.add_argument("--fp16", action="store_true")
+./predict_37_weighted.py:170:        for checkpoint, weights in models_dict:
+./predict_37_weighted.py:171:            model, info = weighted_model(checkpoint, weights, activation_after)
+./xview/inference.py:35:from xview.train_utils import report_checkpoint
+./xview/inference.py:191:    def __init__(self, model, weights, output_key=OUTPUT_MASK_KEY):
+./xview/inference.py:192:        if not isinstance(weights, torch.Tensor):
+./xview/inference.py:193:            weights = torch.tensor(weights).float().view(1, -1, 1, 1)
+./xview/inference.py:197:        self.register_buffer("weights", weights)
+./xview/inference.py:202:        output[self.output_key] *= self.weights
+./xview/inference.py:206:def model_from_checkpoint(
+./xview/inference.py:207:    model_checkpoint: str, tta: Optional[str] = None, activation_after="model", model=None, report=True, classifiers=True
+./xview/inference.py:209:    checkpoint = torch.load(model_checkpoint, map_location="cpu")
+./xview/inference.py:210:    model_name = model or checkpoint["checkpoint_data"]["cmd_args"]["model"]
+./xview/inference.py:212:    score = float(checkpoint["epoch_metrics"]["valid"]["weighted_f1"])
+./xview/inference.py:213:    loc = float(checkpoint["epoch_metrics"]["valid"]["weighted_f1/localization_f1"])
+./xview/inference.py:214:    dmg = float(checkpoint["epoch_metrics"]["valid"]["weighted_f1/damage_f1"])
+./xview/inference.py:215:    fold = int(checkpoint["checkpoint_data"]["cmd_args"]["fold"])
+./xview/inference.py:218:        print(model_checkpoint, model_name)
+./xview/inference.py:219:        report_checkpoint(checkpoint)
+./xview/inference.py:223:    model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+./xview/inference.py:224:    del checkpoint
+./xview/inference.py:251:        "model": fs.id_from_fname(model_checkpoint),
+./xview/inference.py:263:    model, dataset, output_dir, batch_size=1, workers=0, weights=None, fp16=False, cpu=False, postprocessing="naive", save_pseudolabels=True
+./xview/inference.py:275:    if weights is not None:
+./xview/inference.py:276:        print("Using weights", weights)
+./xview/inference.py:277:        weights = torch.tensor(weights).float().view(1, -1, 1, 1)
+./xview/inference.py:281:                weights = weights.half()
+./xview/inference.py:282:            weights = weights.cuda()
+./xview/inference.py:322:        if weights is not None:
+./xview/inference.py:323:            masks *= weights
+./xview/dataset.py:390:        weights = compute_sample_weight("balanced", labels)
+./xview/dataset.py:391:        train_sampler = WeightedRandomSampler(weights, int(num_samples), replacement=bool(num_samples > len(train_df)))
+./xview/dataset.py:392:        print("Using balancing for training", num_samples, weights.min(), weights.mean(), weights.max())
+./xview/dataset.py:589:        "Sample weights (train,val)",
+./xview/xview2_metrics.py:217:            if loc_dmg == "localization":  # localization or damage is fine here
+./xview/utils/inference.sh:38:        printf "${0}: Runs the polygonization in inference mode\n\t-x: path to xview-2 repository\n\t-i: /full/path/to/input/pre-disaster/image.png\n\t-p: /full/path/to/input/post-disaster/image.png\n\t-o: /path/to/output.png\n\t-l: path/to/localization_weights\n\t-c: path/to/classification_weights\n\t-e /path/to/virtual/env/activate\n\t-y continue with local environment and without interactive prompt\n\n"
+./xview/utils/inference.sh:47:localization_weights=""
+./xview/utils/inference.sh:48:classification_weights=""
+./xview/utils/inference.sh:80:             localization_weights="$OPTARG"
+./xview/utils/inference.sh:83:             classification_weights="$OPTARG"
+./xview/utils/inference.sh:135:python3 ./inference.py --input "$input" --weights "$localization_weights" --mean "$XBDIR"/weights/mean.npy --output "$label_temp"/"${input_image%.*}".json >> "$LOGFILE" 2>&1
+./xview/utils/inference.sh:156:python3 ./damage_inference.py --test_data "$inference_base"/output_polygons --test_csv "$inference_base"/output.csv --model_weights "$classification_weights" --output_json /tmp/inference/classification_inference.json >> "$LOGFILE" 2>&1
+./xview/utils/combine_jsons.py:70:    import argparse
+./xview/utils/combine_jsons.py:73:    parser = argparse.ArgumentParser(
+./xview/utils/combine_jsons.py:76:    parser.add_argument(
+./xview/utils/combine_jsons.py:82:    parser.add_argument(
+./xview/utils/combine_jsons.py:88:    parser.add_argument(
+./xview/utils/inference_image_output.py:171:    import argparse
+./xview/utils/inference_image_output.py:174:    parser = argparse.ArgumentParser(
+./xview/utils/inference_image_output.py:177:    parser.add_argument(
+./xview/utils/inference_image_output.py:180:    parser.add_argument(
+./xview/utils/mask_polygons.py:229:    import argparse
+./xview/utils/mask_polygons.py:232:    parser = argparse.ArgumentParser(
+./xview/utils/mask_polygons.py:237:    parser.add_argument(
+./xview/utils/mask_polygons.py:240:    parser.add_argument(
+./xview/utils/mask_polygons.py:245:    parser.add_argument(
+./xview/utils/split_into_disasters.py:59:    import argparse
+./xview/utils/split_into_disasters.py:61:    parser = argparse.ArgumentParser(
+./xview/utils/split_into_disasters.py:64:    parser.add_argument(
+./xview/utils/split_into_disasters.py:70:    parser.add_argument(
+./xview/train_utils.py:3:__all__ = ["report_checkpoint", "clean_checkpoint"]
+./xview/train_utils.py:11:def report_checkpoint(checkpoint):
+./xview/train_utils.py:12:    print("Epoch          :", checkpoint["epoch"])
+./xview/train_utils.py:26:        "Metrics (Train):", [(k, v) for k, v, in checkpoint["epoch_metrics"]["train"].items() if k not in skip_fields]
+./xview/train_utils.py:29:        "Metrics (Valid):", [(k, v) for k, v, in checkpoint["epoch_metrics"]["valid"].items() if k not in skip_fields]
+./xview/train_utils.py:33:def clean_checkpoint(src_fname, dst_fname):
+./xview/train_utils.py:34:    checkpoint = torch.load(src_fname)
+./xview/train_utils.py:39:        if key in checkpoint:
+./xview/train_utils.py:40:            del checkpoint[key]
+./xview/train_utils.py:42:    torch.save(checkpoint, dst_fname)
+./xview/alignment.py:63:        post_i_refined = cv2.warpPerspective(post_i, M,
+./xview/alignment.py:70:                post_i_refined,
+./fit_predict.py:3:import argparse
+./fit_predict.py:13:from catalyst.utils import load_checkpoint, unpack_checkpoint
+./fit_predict.py:18:from pytorch_toolbelt.utils.torch_utils import count_parameters, transfer_weights, get_optimizable_parameters
+./fit_predict.py:42:from xview.train_utils import clean_checkpoint, report_checkpoint, get_criterion_callback
+./fit_predict.py:47:    parser = argparse.ArgumentParser()
+./fit_predict.py:48:    parser.add_argument("-acc", "--accumulation-steps", type=int, default=1, help="Number of batches to process")
+./fit_predict.py:49:    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+./fit_predict.py:50:    parser.add_argument("-v", "--verbose", action="store_true")
+./fit_predict.py:51:    parser.add_argument("--fast", action="store_true")
+./fit_predict.py:52:    parser.add_argument(
+./fit_predict.py:55:    parser.add_argument("-m", "--model", type=str, default="resnet34_fpncat128", help="")
+./fit_predict.py:56:    parser.add_argument("-b", "--batch-size", type=int, default=8, help="Batch Size during training, e.g. -b 64")
+./fit_predict.py:57:    parser.add_argument("-e", "--epochs", type=int, default=100, help="Epoch to run")
+./fit_predict.py:58:    # parser.add_argument('-es', '--early-stopping', type=int, default=None, help='Maximum number of epochs without improvement')
+./fit_predict.py:59:    # parser.add_argument('-fe', '--freeze-encoder', type=int, default=0, help='Freeze encoder parameters for N epochs')
+./fit_predict.py:60:    # parser.add_argument('-ft', '--fine-tune', action='store_true')
+./fit_predict.py:61:    parser.add_argument("-lr", "--learning-rate", type=float, default=1e-3, help="Initial learning rate")
+./fit_predict.py:62:    parser.add_argument(
+./fit_predict.py:70:    parser.add_argument(
+./fit_predict.py:79:    parser.add_argument("-l", "--criterion", type=str, default=None, action="append", nargs="+", help="Criterion")
+./fit_predict.py:80:    parser.add_argument("--mask4", type=str,  default=None, action="append", nargs="+", help="Criterion for mask with stride 4")
+./fit_predict.py:81:    parser.add_argument("--mask8", type=str,  default=None, action="append", nargs="+", help="Criterion for mask with stride 8")
+./fit_predict.py:82:    parser.add_argument("--mask16", type=str,  default=None, action="append", nargs="+", help="Criterion for mask with stride 16")
+./fit_predict.py:83:    parser.add_argument("--mask32", type=str,  default=None, action="append", nargs="+", help="Criterion for mask with stride 32")
+./fit_predict.py:84:    parser.add_argument("--embedding", type=str, default=None)
+./fit_predict.py:86:    parser.add_argument("-o", "--optimizer", default="RAdam", help="Name of the optimizer")
+./fit_predict.py:87:    parser.add_argument(
+./fit_predict.py:88:        "-c", "--checkpoint", type=str, default=None, help="Checkpoint filename to use as initial model weights"
+./fit_predict.py:90:    parser.add_argument("-w", "--workers", default=8, type=int, help="Num workers")
+./fit_predict.py:91:    parser.add_argument("-a", "--augmentations", default="safe", type=str, help="Level of image augmentations")
+./fit_predict.py:92:    parser.add_argument("--transfer", default=None, type=str, help="")
+./fit_predict.py:93:    parser.add_argument("--fp16", action="store_true")
+./fit_predict.py:94:    parser.add_argument("--size", default=512, type=int)
+./fit_predict.py:95:    parser.add_argument("--fold", default=0, type=int)
+./fit_predict.py:96:    parser.add_argument("-s", "--scheduler", default="multistep", type=str, help="")
+./fit_predict.py:97:    parser.add_argument("-x", "--experiment", default=None, type=str, help="")
+./fit_predict.py:98:    parser.add_argument("-d", "--dropout", default=0.0, type=float, help="Dropout before head layer")
+./fit_predict.py:99:    parser.add_argument("--opl", action="store_true")
+./fit_predict.py:100:    parser.add_argument(
+./fit_predict.py:103:    parser.add_argument("-wd", "--weight-decay", default=0, type=float, help="L2 weight decay")
+./fit_predict.py:104:    parser.add_argument("--show", action="store_true")
+./fit_predict.py:105:    parser.add_argument("--dsv", action="store_true")
+./fit_predict.py:106:    parser.add_argument("--balance", action="store_true")
+./fit_predict.py:107:    parser.add_argument("--only-buildings", action="store_true")
+./fit_predict.py:108:    parser.add_argument("--freeze-bn", action="store_true")
+./fit_predict.py:109:    parser.add_argument("--crops", action="store_true", help="Train on random crops")
+./fit_predict.py:110:    parser.add_argument("--post-transform", action="store_true")
+./fit_predict.py:157:        transfer_checkpoint = fs.auto_file(args.transfer)
+./fit_predict.py:158:        print("Transfering weights from model checkpoint", transfer_checkpoint)
+./fit_predict.py:159:        checkpoint = load_checkpoint(transfer_checkpoint)
+./fit_predict.py:160:        pretrained_dict = checkpoint["model_state_dict"]
+./fit_predict.py:162:        transfer_weights(model, pretrained_dict)
+./fit_predict.py:164:    if args.checkpoint:
+./fit_predict.py:165:        checkpoint = load_checkpoint(fs.auto_file(args.checkpoint))
+./fit_predict.py:166:        unpack_checkpoint(checkpoint, model=model)
+./fit_predict.py:168:        print("Loaded model weights from:", args.checkpoint)
+./fit_predict.py:169:        report_checkpoint(checkpoint)
+./fit_predict.py:180:    checkpoint_prefix = f"{current_time}_{args.model}_{args.size}_fold{fold}"
+./fit_predict.py:183:        checkpoint_prefix += "_fp16"
+./fit_predict.py:186:        checkpoint_prefix += "_fast"
+./fit_predict.py:189:        checkpoint_prefix += "_opl"
+./fit_predict.py:192:        checkpoint_prefix += "_crops"
+./fit_predict.py:195:        checkpoint_prefix = experiment
+./fit_predict.py:197:    log_dir = os.path.join("runs", checkpoint_prefix)
+./fit_predict.py:200:    config_fname = os.path.join(log_dir, f"{checkpoint_prefix}.json")
+./fit_predict.py:301:            checkpoint_data={"cmd_args": cmd_args},
+./fit_predict.py:306:        best_checkpoint = os.path.join(log_dir, "warmup", "checkpoints", "best.pth")
+./fit_predict.py:307:        model_checkpoint = os.path.join(log_dir, "warmup", "checkpoints", f"{checkpoint_prefix}_warmup.pth")
+./fit_predict.py:308:        clean_checkpoint(best_checkpoint, model_checkpoint)
+./fit_predict.py:558:        print("Train session    :", checkpoint_prefix)
+./fit_predict.py:601:            checkpoint_data={"cmd_args": vars(args)},
+./fit_predict.py:604:        # Training is finished. Let's run predictions using best checkpoint weights
+./fit_predict.py:605:        best_checkpoint = os.path.join(log_dir, "main", "checkpoints", "best.pth")
+./fit_predict.py:607:        model_checkpoint = os.path.join(log_dir, "main", "checkpoints", f"{checkpoint_prefix}.pth")
+./fit_predict.py:608:        clean_checkpoint(best_checkpoint, model_checkpoint)
+./weights/extracted/fit_predict.py:3:import argparse
+./weights/extracted/fit_predict.py:13:from catalyst.utils import load_checkpoint, unpack_checkpoint
+./weights/extracted/fit_predict.py:18:from pytorch_toolbelt.utils.torch_utils import count_parameters, transfer_weights, get_optimizable_parameters
+./weights/extracted/fit_predict.py:42:from xview.train_utils import clean_checkpoint, report_checkpoint, get_criterion_callback
+./weights/extracted/fit_predict.py:47:    parser = argparse.ArgumentParser()
+./weights/extracted/fit_predict.py:48:    parser.add_argument("-acc", "--accumulation-steps", type=int, default=1, help="Number of batches to process")
+./weights/extracted/fit_predict.py:49:    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+./weights/extracted/fit_predict.py:50:    parser.add_argument("-v", "--verbose", action="store_true")
+./weights/extracted/fit_predict.py:51:    parser.add_argument("--fast", action="store_true")
+./weights/extracted/fit_predict.py:52:    parser.add_argument(
+./weights/extracted/fit_predict.py:55:    parser.add_argument("-m", "--model", type=str, default="resnet34_fpncat128", help="")
+./weights/extracted/fit_predict.py:56:    parser.add_argument("-b", "--batch-size", type=int, default=8, help="Batch Size during training, e.g. -b 64")
+./weights/extracted/fit_predict.py:57:    parser.add_argument("-e", "--epochs", type=int, default=100, help="Epoch to run")
+./weights/extracted/fit_predict.py:58:    # parser.add_argument('-es', '--early-stopping', type=int, default=None, help='Maximum number of epochs without improvement')
+./weights/extracted/fit_predict.py:59:    # parser.add_argument('-fe', '--freeze-encoder', type=int, default=0, help='Freeze encoder parameters for N epochs')
+./weights/extracted/fit_predict.py:60:    # parser.add_argument('-ft', '--fine-tune', action='store_true')
+./weights/extracted/fit_predict.py:61:    parser.add_argument("-lr", "--learning-rate", type=float, default=1e-3, help="Initial learning rate")
+./weights/extracted/fit_predict.py:62:    parser.add_argument(
+./weights/extracted/fit_predict.py:70:    parser.add_argument(
+./weights/extracted/fit_predict.py:79:    parser.add_argument("-l", "--criterion", type=str, default=None, action="append", nargs="+", help="Criterion")
+./weights/extracted/fit_predict.py:80:    parser.add_argument("--mask4", type=str,  default=None, action="append", nargs="+", help="Criterion for mask with stride 4")
+./weights/extracted/fit_predict.py:81:    parser.add_argument("--mask8", type=str,  default=None, action="append", nargs="+", help="Criterion for mask with stride 8")
+./weights/extracted/fit_predict.py:82:    parser.add_argument("--mask16", type=str,  default=None, action="append", nargs="+", help="Criterion for mask with stride 16")
+./weights/extracted/fit_predict.py:83:    parser.add_argument("--mask32", type=str,  default=None, action="append", nargs="+", help="Criterion for mask with stride 32")
+./weights/extracted/fit_predict.py:84:    parser.add_argument("--embedding", type=str, default=None)
+./weights/extracted/fit_predict.py:86:    parser.add_argument("-o", "--optimizer", default="RAdam", help="Name of the optimizer")
+./weights/extracted/fit_predict.py:87:    parser.add_argument(
+./weights/extracted/fit_predict.py:88:        "-c", "--checkpoint", type=str, default=None, help="Checkpoint filename to use as initial model weights"
+./weights/extracted/fit_predict.py:90:    parser.add_argument("-w", "--workers", default=8, type=int, help="Num workers")
+./weights/extracted/fit_predict.py:91:    parser.add_argument("-a", "--augmentations", default="safe", type=str, help="Level of image augmentations")
+./weights/extracted/fit_predict.py:92:    parser.add_argument("--transfer", default=None, type=str, help="")
+./weights/extracted/fit_predict.py:93:    parser.add_argument("--fp16", action="store_true")
+./weights/extracted/fit_predict.py:94:    parser.add_argument("--size", default=512, type=int)
+./weights/extracted/fit_predict.py:95:    parser.add_argument("--fold", default=0, type=int)
+./weights/extracted/fit_predict.py:96:    parser.add_argument("-s", "--scheduler", default="multistep", type=str, help="")
+./weights/extracted/fit_predict.py:97:    parser.add_argument("-x", "--experiment", default=None, type=str, help="")
+./weights/extracted/fit_predict.py:98:    parser.add_argument("-d", "--dropout", default=0.0, type=float, help="Dropout before head layer")
+./weights/extracted/fit_predict.py:99:    parser.add_argument("--opl", action="store_true")
+./weights/extracted/fit_predict.py:100:    parser.add_argument(
+./weights/extracted/fit_predict.py:103:    parser.add_argument("-wd", "--weight-decay", default=0, type=float, help="L2 weight decay")
+./weights/extracted/fit_predict.py:104:    parser.add_argument("--show", action="store_true")
+./weights/extracted/fit_predict.py:105:    parser.add_argument("--dsv", action="store_true")
+./weights/extracted/fit_predict.py:106:    parser.add_argument("--balance", action="store_true")
+./weights/extracted/fit_predict.py:107:    parser.add_argument("--only-buildings", action="store_true")
+./weights/extracted/fit_predict.py:108:    parser.add_argument("--freeze-bn", action="store_true")
+./weights/extracted/fit_predict.py:109:    parser.add_argument("--crops", action="store_true", help="Train on random crops")
+./weights/extracted/fit_predict.py:110:    parser.add_argument("--post-transform", action="store_true")
+./weights/extracted/fit_predict.py:157:        transfer_checkpoint = fs.auto_file(args.transfer)
+./weights/extracted/fit_predict.py:158:        print("Transfering weights from model checkpoint", transfer_checkpoint)
+./weights/extracted/fit_predict.py:159:        checkpoint = load_checkpoint(transfer_checkpoint)
+./weights/extracted/fit_predict.py:160:        pretrained_dict = checkpoint["model_state_dict"]
+./weights/extracted/fit_predict.py:162:        transfer_weights(model, pretrained_dict)
+./weights/extracted/fit_predict.py:164:    if args.checkpoint:
+./weights/extracted/fit_predict.py:165:        checkpoint = load_checkpoint(fs.auto_file(args.checkpoint))
+./weights/extracted/fit_predict.py:166:        unpack_checkpoint(checkpoint, model=model)
+./weights/extracted/fit_predict.py:168:        print("Loaded model weights from:", args.checkpoint)
+./weights/extracted/fit_predict.py:169:        report_checkpoint(checkpoint)
+./weights/extracted/fit_predict.py:180:    checkpoint_prefix = f"{current_time}_{args.model}_{args.size}_fold{fold}"
+./weights/extracted/fit_predict.py:183:        checkpoint_prefix += "_fp16"
+./weights/extracted/fit_predict.py:186:        checkpoint_prefix += "_fast"
+./weights/extracted/fit_predict.py:189:        checkpoint_prefix += "_opl"
+./weights/extracted/fit_predict.py:192:        checkpoint_prefix += "_crops"
+./weights/extracted/fit_predict.py:195:        checkpoint_prefix = experiment
+./weights/extracted/fit_predict.py:197:    log_dir = os.path.join("runs", checkpoint_prefix)
+./weights/extracted/fit_predict.py:200:    config_fname = os.path.join(log_dir, f"{checkpoint_prefix}.json")
+./weights/extracted/fit_predict.py:301:            checkpoint_data={"cmd_args": cmd_args},
+./weights/extracted/fit_predict.py:306:        best_checkpoint = os.path.join(log_dir, "warmup", "checkpoints", "best.pth")
+./weights/extracted/fit_predict.py:307:        model_checkpoint = os.path.join(log_dir, "warmup", "checkpoints", f"{checkpoint_prefix}_warmup.pth")
+./weights/extracted/fit_predict.py:308:        clean_checkpoint(best_checkpoint, model_checkpoint)
+./weights/extracted/fit_predict.py:558:        print("Train session    :", checkpoint_prefix)
+./weights/extracted/fit_predict.py:601:            checkpoint_data={"cmd_args": vars(args)},
+./weights/extracted/fit_predict.py:604:        # Training is finished. Let's run predictions using best checkpoint weights
+./weights/extracted/fit_predict.py:605:        best_checkpoint = os.path.join(log_dir, "main", "checkpoints", "best.pth")
+./weights/extracted/fit_predict.py:607:        model_checkpoint = os.path.join(log_dir, "main", "checkpoints", f"{checkpoint_prefix}.pth")
+./weights/extracted/fit_predict.py:608:        clean_checkpoint(best_checkpoint, model_checkpoint)
+./weights/extracted/finetune.py:3:import argparse
+./weights/extracted/finetune.py:11:from catalyst.utils import load_checkpoint, unpack_checkpoint
+./weights/extracted/finetune.py:15:from pytorch_toolbelt.utils.torch_utils import count_parameters, transfer_weights, get_optimizable_parameters
+./weights/extracted/finetune.py:41:from xview.train_utils import clean_checkpoint, report_checkpoint, get_criterion_callback
+./weights/extracted/finetune.py:46:    parser = argparse.ArgumentParser()
+./weights/extracted/finetune.py:47:    parser.add_argument("-acc", "--accumulation-steps", type=int, default=1, help="Number of batches to process")
+./weights/extracted/finetune.py:48:    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+./weights/extracted/finetune.py:49:    parser.add_argument("-v", "--verbose", action="store_true")
+./weights/extracted/finetune.py:50:    parser.add_argument("--fast", action="store_true")
+./weights/extracted/finetune.py:51:    parser.add_argument(
+./weights/extracted/finetune.py:54:    parser.add_argument("-m", "--model", type=str, default="resnet34_fpncat128", help="")
+./weights/extracted/finetune.py:55:    parser.add_argument("-b", "--batch-size", type=int, default=8, help="Batch Size during training, e.g. -b 64")
+./weights/extracted/finetune.py:56:    parser.add_argument("-e", "--epochs", type=int, default=100, help="Epoch to run")
+./weights/extracted/finetune.py:57:    # parser.add_argument('-es', '--early-stopping', type=int, default=None, help='Maximum number of epochs without improvement')
+./weights/extracted/finetune.py:58:    # parser.add_argument('-fe', '--freeze-encoder', type=int, default=0, help='Freeze encoder parameters for N epochs')
+./weights/extracted/finetune.py:59:    # parser.add_argument('-ft', '--fine-tune', action='store_true')
+./weights/extracted/finetune.py:60:    parser.add_argument("-lr", "--learning-rate", type=float, default=1e-3, help="Initial learning rate")
+./weights/extracted/finetune.py:61:    parser.add_argument(
+./weights/extracted/finetune.py:69:    parser.add_argument(
+./weights/extracted/finetune.py:78:    parser.add_argument("-l", "--criterion", type=str, default=None, action="append", nargs="+", help="Criterion")
+./weights/extracted/finetune.py:79:    parser.add_argument(
+./weights/extracted/finetune.py:82:    parser.add_argument(
+./weights/extracted/finetune.py:85:    parser.add_argument(
+./weights/extracted/finetune.py:88:    parser.add_argument(
+./weights/extracted/finetune.py:91:    parser.add_argument("--embedding", type=str, default=None)
+./weights/extracted/finetune.py:93:    parser.add_argument("-o", "--optimizer", default="RAdam", help="Name of the optimizer")
+./weights/extracted/finetune.py:94:    parser.add_argument(
+./weights/extracted/finetune.py:95:        "-c", "--checkpoint", type=str, default=None, help="Checkpoint filename to use as initial model weights"
+./weights/extracted/finetune.py:97:    parser.add_argument("-w", "--workers", default=8, type=int, help="Num workers")
+./weights/extracted/finetune.py:98:    parser.add_argument("-a", "--augmentations", default="safe", type=str, help="Level of image augmentations")
+./weights/extracted/finetune.py:99:    parser.add_argument("--transfer", default=None, type=str, help="")
+./weights/extracted/finetune.py:100:    parser.add_argument("--fp16", action="store_true")
+./weights/extracted/finetune.py:101:    parser.add_argument("--size", default=512, type=int)
+./weights/extracted/finetune.py:102:    parser.add_argument("--fold", default=0, type=int)
+./weights/extracted/finetune.py:103:    parser.add_argument("-s", "--scheduler", default="multistep", type=str, help="")
+./weights/extracted/finetune.py:104:    parser.add_argument("-x", "--experiment", default=None, type=str, help="")
+./weights/extracted/finetune.py:105:    parser.add_argument("-d", "--dropout", default=0.0, type=float, help="Dropout before head layer")
+./weights/extracted/finetune.py:106:    parser.add_argument("-pl", "--pseudolabeling", type=str, required=True)
+./weights/extracted/finetune.py:107:    parser.add_argument("-wd", "--weight-decay", default=0, type=float, help="L2 weight decay")
+./weights/extracted/finetune.py:108:    parser.add_argument("--show", action="store_true")
+./weights/extracted/finetune.py:109:    parser.add_argument("--dsv", action="store_true")
+./weights/extracted/finetune.py:110:    parser.add_argument("--balance", action="store_true")
+./weights/extracted/finetune.py:111:    parser.add_argument("--only-buildings", action="store_true")
+./weights/extracted/finetune.py:112:    parser.add_argument("--freeze-bn", action="store_true")
+================================================
+DONE

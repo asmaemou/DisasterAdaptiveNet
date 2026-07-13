@@ -1,0 +1,356 @@
+from __future__ import annotations
+
+
+# Required output dictionary keys for inference.
+
+# Some code uses OUTPUT_* names, some uses shorter *_KEY names.
+
+OUTPUT_MASK_KEY = "mask"
+
+OUTPUT_DAMAGE_TYPE_KEY = "damage_type"
+
+OUTPUT_DISASTER_TYPE_KEY = "disaster_type"
+
+DAMAGE_TYPE_KEY = OUTPUT_DAMAGE_TYPE_KEY
+
+DISASTER_TYPE_KEY = OUTPUT_DISASTER_TYPE_KEY
+
+
+
+# Required output dictionary keys for inference.
+# Defined here to avoid missing imports in this extracted 3rd-place package.
+
+import torch.nn.functional as F
+
+try:
+    from xview.models.cls import disaster_type_classifier, damage_type_classifier
+except Exception:
+    from torch import nn
+
+    def disaster_type_classifier(in_channels, num_classes):
+        return nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(in_channels, num_classes),
+        )
+
+    def damage_type_classifier(in_channels, num_classes):
+        return nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(in_channels, num_classes),
+        )
+
+
+try:
+    from xview.dataset import DISASTER_TYPES, DAMAGE_TYPES
+except Exception:
+    # Fallback constants used only to size optional classifier heads.
+    DISASTER_TYPES = ["earthquake", "tsunami", "flooding", "volcano", "wildfire", "wind"]
+    DAMAGE_TYPES = ["no-damage", "minor-damage", "major-damage", "destroyed"]
+
+from torch import nn
+from functools import partial
+from typing import Optional
+
+import torch
+from pytorch_toolbelt.modules import ABN, ACT_RELU
+from pytorch_toolbelt.modules import encoders as E
+from pytorch_toolbelt.modules.decoders import FPNCatDecoder as _FPNCatDecoder
+import inspect
+
+class FPNCatDecoder(_FPNCatDecoder):
+    def __init__(self, *args, **kwargs):
+        params = inspect.signature(_FPNCatDecoder.__init__).parameters
+        accepts_kwargs = any(
+            v.kind == inspect.Parameter.VAR_KEYWORD
+            for v in params.values()
+        )
+
+        # Original xView2 code uses output_channels.
+        # Different pytorch-toolbelt versions use different names.
+        if "output_channels" in kwargs and "output_channels" not in params:
+            value = kwargs.pop("output_channels")
+            if "fpn_channels" in params:
+                kwargs["fpn_channels"] = value
+            elif "channels" in params:
+                kwargs["channels"] = value
+            else:
+                kwargs["output_channels"] = value
+
+        # Remove old xView2 decoder args not supported by this installed toolbelt.
+        if not accepts_kwargs:
+            allowed = set(params.keys()) - {"self"}
+            dropped = []
+            for k in list(kwargs.keys()):
+                if k not in allowed:
+                    dropped.append(k)
+                    kwargs.pop(k)
+
+            if dropped:
+                print("[WARN] Dropping unsupported FPNCatDecoder args:", dropped)
+
+        super().__init__(*args, **kwargs)
+
+class FPNSumFinalBlock(nn.Module):
+    def __init__(self, input_channels, output_channels, abn_block=ABN):
+        super().__init__()
+        self.conv1 = nn.Conv2d(input_channels, input_channels, kernel_size=3, padding=1, bias=False)
+        self.abn1 = abn_block(input_channels)
+        self.conv2 = nn.Conv2d(input_channels, input_channels, kernel_size=3, padding=1, bias=False)
+        self.abn2 = abn_block(input_channels)
+
+        self.final = nn.Conv2d(input_channels, output_channels, kernel_size=3, padding=1)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.abn1(x)
+        x = self.conv2(x)
+        x = self.abn2(x)
+        x = self.final(x)
+        return x
+
+
+class FPNCatFinalBlock(nn.Module):
+    def __init__(self, input_channels, output_channels, abn_block=ABN):
+        super().__init__()
+        self.conv1 = nn.Conv2d(input_channels, input_channels, kernel_size=3, padding=1, bias=False)
+        self.abn1 = abn_block(input_channels)
+        self.conv2 = nn.Conv2d(input_channels, output_channels, kernel_size=3, padding=1)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.abn1(x)
+        x = self.conv2(x)
+        return x
+
+
+
+# Compatibility wrapper for classifier helper signatures.
+# Some xView2 code passes dropout, but the available helper may not accept it.
+import inspect as _inspect_classifier
+
+_orig_disaster_type_classifier = disaster_type_classifier
+_orig_damage_type_classifier = damage_type_classifier
+
+def _safe_classifier_call(fn, *args, **kwargs):
+    params = _inspect_classifier.signature(fn).parameters
+    accepts_kwargs = any(
+        p.kind == _inspect_classifier.Parameter.VAR_KEYWORD
+        for p in params.values()
+    )
+
+    # Common keyword-name compatibility
+    if "input_channels" in kwargs and "in_channels" in params and "input_channels" not in params:
+        kwargs["in_channels"] = kwargs.pop("input_channels")
+
+    if "in_channels" in kwargs and "input_channels" in params and "in_channels" not in params:
+        kwargs["input_channels"] = kwargs.pop("in_channels")
+
+    if "classes" in kwargs and "num_classes" in params and "classes" not in params:
+        kwargs["num_classes"] = kwargs.pop("classes")
+
+    if "num_classes" in kwargs and "classes" in params and "num_classes" not in params:
+        kwargs["classes"] = kwargs.pop("num_classes")
+
+    if not accepts_kwargs:
+        allowed = set(params.keys())
+        dropped = []
+        for k in list(kwargs.keys()):
+            if k not in allowed:
+                dropped.append(k)
+                kwargs.pop(k)
+        if dropped:
+            print("[WARN] Dropping unsupported classifier args:", dropped)
+
+    return fn(*args, **kwargs)
+
+def disaster_type_classifier(*args, **kwargs):
+    return _safe_classifier_call(_orig_disaster_type_classifier, *args, **kwargs)
+
+def damage_type_classifier(*args, **kwargs):
+    return _safe_classifier_call(_orig_damage_type_classifier, *args, **kwargs)
+
+
+# Alias for naming mismatch in original xView2 code.
+# Some places call damage_types_classifier with plural "types".
+if "damage_types_classifier" not in globals():
+    damage_types_classifier = damage_type_classifier
+
+class FPNCatSegmentationModelV2(nn.Module):
+    def __init__(
+        self,
+        encoder: EncoderModule,
+        num_classes: int,
+        disaster_type_classes: int,
+        damage_type_classes: int,
+        dropout=0.25,
+        abn_block=ABN,
+        fpn_channels=256,
+        full_size_mask=True,
+        interpolation_mode: str = "bilinear",
+        align_corners: Optional[bool] = False,
+    ):
+        super().__init__()
+        self.encoder = encoder
+
+        feature_maps = [2 * fm for fm in encoder.output_filters]
+
+        self.decoder = FPNCatDecoder(
+            feature_maps=feature_maps,
+            output_channels=num_classes,
+            dsv_channels=None,
+            fpn_channels=fpn_channels,
+            abn_block=abn_block,
+            dropout=dropout,
+            final_block=partial(FPNCatFinalBlock, abn_block=abn_block),
+            interpolation_mode=interpolation_mode,
+            align_corners=align_corners,
+        )
+
+        self.full_size_mask = full_size_mask
+        if disaster_type_classes is not None:
+            self.disaster_type_classifier = disaster_type_classifier(
+                feature_maps[-1], disaster_type_classes, dropout=dropout
+            )
+        else:
+            self.disaster_type_classifier = None
+
+        if damage_type_classes is not None:
+            self.damage_types_classifier = damage_types_classifier(
+                feature_maps[-1], damage_type_classes, dropout=dropout
+            )
+        else:
+            self.damage_types_classifier = None
+
+    def forward(self, x):
+        batch_size = x.size(0)
+        pre, post = x[:, 0:3, ...], x[:, 3:6, ...]
+
+        if self.training:
+            x = torch.cat([pre, post], dim=0)
+            features = self.encoder(x)
+            features = [torch.cat([f[0:batch_size], f[batch_size : batch_size * 2]], dim=1) for f in features]
+        else:
+            pre_features, post_features = self.encoder(pre), self.encoder(post)
+            features = [torch.cat([pre, post], dim=1) for pre, post in zip(pre_features, post_features)]
+
+        # Decode mask
+        mask = self.decoder(features)
+
+        # Compatibility fix:
+        # Some pytorch-toolbelt versions return a list/tuple of decoder outputs.
+        # Convert that list into one tensor before interpolation.
+        if isinstance(mask, (list, tuple)):
+            if len(mask) == 0:
+                raise RuntimeError("FPNCatDecoder returned an empty list")
+
+            target_size = mask[0].shape[-2:]
+            mask_list = []
+            for m in mask:
+                if m.shape[-2:] != target_size:
+                    m = F.interpolate(m, size=target_size, mode="bilinear", align_corners=False)
+                mask_list.append(m)
+
+            # If all outputs have the same channel count, average them.
+            # This is safest for segmentation logits.
+            channels = [m.shape[1] for m in mask_list]
+            if len(set(channels)) == 1:
+                mask = torch.stack(mask_list, dim=0).mean(dim=0)
+            else:
+                raise RuntimeError(f"FPNCatDecoder returned outputs with different channels: {channels}")
+
+        if self.full_size_mask:
+            mask = F.interpolate(mask, size=x.size()[2:], mode="bilinear", align_corners=False)
+
+        output = {OUTPUT_MASK_KEY: mask}
+
+        if self.disaster_type_classifier is not None:
+            disaster_type = self.disaster_type_classifier(features[-1])
+            output[DISASTER_TYPE_KEY] = disaster_type
+
+        if self.damage_types_classifier is not None:
+            damage_types = self.damage_types_classifier(features[-1])
+            output[DAMAGE_TYPE_KEY] = damage_types
+
+        return output
+
+
+def resnet34_fpncatv2_256_nearest(num_classes=5, dropout=0.0, pretrained=True, classifiers=True):
+    encoder = E.Resnet34Encoder(pretrained=pretrained)
+    return FPNCatSegmentationModelV2(
+        encoder,
+        num_classes=num_classes,
+        disaster_type_classes=len(DISASTER_TYPES) if classifiers else None,
+        damage_type_classes=len(DAMAGE_TYPES) if classifiers else None,
+        fpn_channels=256,
+        dropout=dropout,
+        abn_block=partial(ABN, activation=ACT_RELU),
+        interpolation_mode="nearest",
+        align_corners=None,
+    )
+
+
+def resnet34_fpncatv2_256(num_classes=5, dropout=0.0, pretrained=True, classifiers=True):
+    encoder = E.Resnet34Encoder(pretrained=pretrained)
+    return FPNCatSegmentationModelV2(
+        encoder,
+        num_classes=num_classes,
+        disaster_type_classes=len(DISASTER_TYPES) if classifiers else None,
+        damage_type_classes=len(DAMAGE_TYPES) if classifiers else None,
+        fpn_channels=256,
+        dropout=dropout,
+        abn_block=partial(ABN, activation=ACT_RELU),
+    )
+
+
+def resnet101_fpncatv2_256(num_classes=5, dropout=0.0, pretrained=True, classifiers=True):
+    encoder = E.Resnet101Encoder(pretrained=pretrained)
+    return FPNCatSegmentationModelV2(
+        encoder,
+        num_classes=num_classes,
+        disaster_type_classes=len(DISASTER_TYPES) if classifiers else None,
+        damage_type_classes=len(DAMAGE_TYPES) if classifiers else None,
+        fpn_channels=256,
+        dropout=dropout,
+        abn_block=partial(ABN, activation=ACT_RELU),
+    )
+
+
+def densenet201_fpncatv2_256(num_classes=5, dropout=0.0, pretrained=True, classifiers=True):
+    encoder = E.DenseNet201Encoder(pretrained=pretrained)
+    return FPNCatSegmentationModelV2(
+        encoder,
+        num_classes=num_classes,
+        disaster_type_classes=len(DISASTER_TYPES) if classifiers else None,
+        damage_type_classes=len(DAMAGE_TYPES) if classifiers else None,
+        fpn_channels=256,
+        dropout=dropout,
+        abn_block=partial(ABN, activation=ACT_RELU),
+    )
+
+
+def inceptionv4_fpncatv2_256(num_classes=5, dropout=0.0, pretrained=True, classifiers=True):
+    encoder = E.InceptionV4Encoder(pretrained=pretrained, layers=[1, 2, 3, 4])
+    return FPNCatSegmentationModelV2(
+        encoder,
+        num_classes=num_classes,
+        disaster_type_classes=len(DISASTER_TYPES) if classifiers else None,
+        damage_type_classes=len(DAMAGE_TYPES) if classifiers else None,
+        fpn_channels=256,
+        dropout=dropout,
+        abn_block=partial(ABN, activation=ACT_RELU),
+    )
+
+
+def efficientb4_fpncatv2_256(num_classes=5, dropout=0.0, pretrained=True, classifiers=True):
+    encoder = E.EfficientNetB4Encoder()
+    return FPNCatSegmentationModelV2(
+        encoder,
+        num_classes=num_classes,
+        disaster_type_classes=len(DISASTER_TYPES) if classifiers else None,
+        damage_type_classes=len(DAMAGE_TYPES) if classifiers else None,
+        fpn_channels=256,
+        dropout=dropout,
+        abn_block=partial(ABN, activation=ACT_RELU),
+    )

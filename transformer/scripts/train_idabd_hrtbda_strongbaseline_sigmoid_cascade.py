@@ -1160,6 +1160,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--test-split", type=str, default="test10")
 
     parser.add_argument("--phase1-checkpoint", type=str, default="")
+    parser.add_argument("--phase1-threshold", type=float, default=0.5, help="Fallback Phase-I threshold if checkpoint has no best_threshold field.")
     parser.add_argument("--phase2-checkpoint", type=str, default="")
 
     parser.add_argument("--phase1-epochs", type=int, default=150)
