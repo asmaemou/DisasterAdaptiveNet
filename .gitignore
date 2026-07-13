@@ -89,9 +89,15 @@ output/
 baselines/xview2_winners/**/weights/
 
 
+# Generated first-place xView2 predictions and submissions
+
+baselines/xview2_winners/xview2_first_place/submission/
+baselines/xview2_winners/xview2_first_place/pred_*/
+baselines/xview2_winners/xview2_first_place/pred*/
+
+
 
 
 # Generated baseline predictions and target masks
 
 baselines/xview2_winners/oof_preds/
-
