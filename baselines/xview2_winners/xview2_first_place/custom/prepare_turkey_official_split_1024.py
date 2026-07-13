@@ -4,6 +4,7 @@ import os
 import shutil
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -82,15 +83,55 @@ def fit_1024(im, is_mask=False):
     return im.resize((TARGET_SIZE, TARGET_SIZE), resample=resample)
 
 
+def load_rgb_image(path):
+    path = Path(path)
+
+    try:
+        return Image.open(path).convert("RGB")
+    except Exception as pil_error:
+        arr = cv2.imread(str(path), cv2.IMREAD_COLOR)
+
+        if arr is None:
+            size = path.stat().st_size if path.exists() else -1
+            with open(path, "rb") as f:
+                first_bytes = f.read(32)
+            raise RuntimeError(
+                f"Could not read image with PIL or OpenCV: {path}\n"
+                f"File size: {size}\n"
+                f"First bytes: {first_bytes}\n"
+                f"PIL error: {pil_error}"
+            )
+
+        arr = cv2.cvtColor(arr, cv2.COLOR_BGR2RGB)
+        return Image.fromarray(arr)
+
+
 def save_rgb_1024(src, dst):
-    im = Image.open(src).convert("RGB")
+    im = load_rgb_image(src)
     fit_1024(im, is_mask=False).save(dst)
 
 
 def read_mask(path):
-    arr = np.array(Image.open(path))
+    path = Path(path)
+
+    try:
+        arr = np.array(Image.open(path))
+    except Exception:
+        arr = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+
+        if arr is None:
+            size = path.stat().st_size if path.exists() else -1
+            with open(path, "rb") as f:
+                first_bytes = f.read(32)
+            raise RuntimeError(
+                f"Could not read mask with PIL or OpenCV: {path}\n"
+                f"File size: {size}\n"
+                f"First bytes: {first_bytes}"
+            )
+
     if arr.ndim == 3:
         arr = arr[:, :, 0]
+
     return arr.astype(np.uint8)
 
 
