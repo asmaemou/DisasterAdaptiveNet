@@ -4,24 +4,40 @@ from pathlib import Path
 import re
 import subprocess
 
-TRAIN_TUNE_FILES = [
+RESTORE_FILES = [
     "train154_cls_cce.py", "train154_loc.py",
     "train34_cls.py", "train34_loc.py",
     "train50_cls_cce.py", "train50_loc.py",
     "train92_cls_cce.py", "train92_loc.py",
-    "tune154_cls_cce.py", "tune34_cls.py",
-    "tune50_cls_cce.py", "tune50_loc.py",
-    "tune92_cls_cce.py", "tune92_loc.py",
-]
 
-PREDICT_FILES = [
+    "tune154_cls_cce.py",
+    "tune34_cls.py",
+    "tune50_cls_cce.py",
+    "tune50_loc.py",
+    "tune92_cls_cce.py",
+    "tune92_loc.py",
+
     "predict154cls.py", "predict154_loc.py",
     "predict34cls.py", "predict34_loc.py",
     "predict50cls.py", "predict50_loc.py",
     "predict92cls.py", "predict92_loc.py",
+    "predict_loc_val.py",
 ]
 
-FILES = TRAIN_TUNE_FILES + PREDICT_FILES + ["predict_loc_val.py"]
+PATCH_FILES = [
+    "tune154_cls_cce.py",
+    "tune34_cls.py",
+    "tune50_cls_cce.py",
+    "tune50_loc.py",
+    "tune92_cls_cce.py",
+    "tune92_loc.py",
+
+    "predict154cls.py", "predict154_loc.py",
+    "predict34cls.py", "predict34_loc.py",
+    "predict50cls.py", "predict50_loc.py",
+    "predict92cls.py", "predict92_loc.py",
+    "predict_loc_val.py",
+]
 
 APEX_BLOCK = '''try:
     from apex import amp
@@ -80,6 +96,7 @@ def get_official_split_idxs():
 def patch_file(path):
     s = path.read_text()
     old = s
+    official_split_already_patched = "def get_official_split_idxs():" in s
 
     if "import os\n" not in s:
         s = s.replace("from os import", "import os\nfrom os import", 1)
@@ -102,48 +119,49 @@ def patch_file(path):
         s,
     )
 
-    s = s.replace(
-        "train_dirs = ['train', 'tier3']",
-        "train_dirs = ['train', 'val'] if os.environ.get('USE_OFFICIAL_VAL', '0') == '1' else ['train', 'tier3']",
-    )
+    if not official_split_already_patched:
+        s = s.replace(
+            "train_dirs = ['train', 'tier3']",
+            "train_dirs = ['train', 'val'] if os.environ.get('USE_OFFICIAL_VAL', '0') == '1' else ['train', 'tier3']",
+        )
+
+        s = re.sub(
+            r"all_files = \[\]\n"
+            r"for d in train_dirs:\n"
+            r"    for f in sorted\(listdir\(path.join\(d, 'images'\)\)\):\n"
+            r"        if '_pre_disaster.png' in f:\n"
+            r"            all_files.append\(path.join\(d, 'images', f\)\)\n"
+            r"(?:train_len = len\(all_files\)\n)?",
+            OFFICIAL_COLLECTION,
+            s,
+        )
+
+        def replace_random_split(match):
+            indent = match.group("indent")
+            statement = match.group("statement")
+            return (
+                f"{indent}if os.environ.get('USE_OFFICIAL_VAL', '0') == '1':\n"
+                f"{indent}    train_idxs, val_idxs = get_official_split_idxs()\n"
+                f"{indent}else:\n"
+                f"{indent}    {statement}"
+            )
+
+        s = re.sub(
+            r"^(?P<indent>[ \t]*)(?P<statement>"
+            r"train_idxs, val_idxs = train_test_split\(np\.arange\(len\(all_files\)\), test_size=0\.1, random_state=seed\)"
+            r"|_, val_idxs = train_test_split\(np\.arange\(train_len\), test_size=0\.1, random_state=seed\)"
+            r")$",
+            replace_random_split,
+            s,
+            flags=re.MULTILINE,
+        )
 
     s = re.sub(
-        r"all_files = \[\]\n"
-        r"for d in train_dirs:\n"
-        r"    for f in sorted\(listdir\(path.join\(d, 'images'\)\)\):\n"
-        r"        if '_pre_disaster.png' in f:\n"
-        r"            all_files.append\(path.join\(d, 'images', f\)\)\n"
-        r"(?:train_len = len\(all_files\)\n)?",
-        OFFICIAL_COLLECTION,
+        r"^    train_idxs = np\.arange\(len\(all_files\)\)(\s*# Use all train)?$",
+        "    if os.environ.get('USE_OFFICIAL_VAL', '0') != '1':\n"
+        "        train_idxs = np.arange(len(all_files))\\1",
         s,
-    )
-
-    s = s.replace(
-        "train_idxs, val_idxs = train_test_split(np.arange(len(all_files)), test_size=0.1, random_state=seed)",
-        "if os.environ.get('USE_OFFICIAL_VAL', '0') == '1':\n"
-        "        train_idxs, val_idxs = get_official_split_idxs()\n"
-        "    else:\n"
-        "        train_idxs, val_idxs = train_test_split(np.arange(len(all_files)), test_size=0.1, random_state=seed)",
-    )
-
-    s = s.replace(
-        "_, val_idxs = train_test_split(np.arange(train_len), test_size=0.1, random_state=seed)",
-        "if os.environ.get('USE_OFFICIAL_VAL', '0') == '1':\n"
-        "        train_idxs, val_idxs = get_official_split_idxs()\n"
-        "    else:\n"
-        "        _, val_idxs = train_test_split(np.arange(train_len), test_size=0.1, random_state=seed)",
-    )
-
-    s = s.replace(
-        "train_idxs = np.arange(len(all_files)) # Use all train",
-        "if os.environ.get('USE_OFFICIAL_VAL', '0') != '1':\n"
-        "        train_idxs = np.arange(len(all_files)) # Use all train",
-    )
-
-    s = s.replace(
-        "train_idxs = np.arange(len(all_files))  # Use all train",
-        "if os.environ.get('USE_OFFICIAL_VAL', '0') != '1':\n"
-        "        train_idxs = np.arange(len(all_files))  # Use all train",
+        flags=re.MULTILINE,
     )
 
     s = s.replace(
@@ -181,15 +199,15 @@ def patch_file(path):
 
 def main():
     print("Restoring original scripts from git before patching...")
-    subprocess.run(["git", "checkout", "--"] + FILES, check=True)
+    subprocess.run(["git", "checkout", "--"] + RESTORE_FILES, check=True)
 
-    for name in FILES:
+    for name in PATCH_FILES:
         p = Path(name)
         if p.exists():
             patch_file(p)
 
     print("Checking syntax...")
-    subprocess.run(["python", "-m", "py_compile"] + FILES, check=True)
+    subprocess.run(["python", "-m", "py_compile"] + PATCH_FILES, check=True)
     print("Official split patch complete.")
 
 
