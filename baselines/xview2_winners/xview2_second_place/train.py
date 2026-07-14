@@ -339,17 +339,7 @@ def train_epoch(current_epoch, loss_functions, model, optimizer, scheduler, trai
     model.train()
     if conf["optimizer"]["schedule"]["mode"] == "epoch":
         scheduler.step(current_epoch)
-    print("[DEBUG] entering train DataLoader loop", flush=True)
     for i, sample in enumerate(iterator):
-        print(f"[DEBUG] got batch {i}", flush=True)
-        try:
-            print("[DEBUG] sample keys:", list(sample.keys()), flush=True)
-            for _k, _v in sample.items():
-                if hasattr(_v, "shape"):
-                    print(f"[DEBUG] {_k} shape: {_v.shape}", flush=True)
-        except Exception as _e:
-            print("[DEBUG] sample print failed:", repr(_e), flush=True)
-
         imgs = sample["image"].cuda()
         masks = sample["original_mask"].cuda().long()
         out_mask = model(imgs)

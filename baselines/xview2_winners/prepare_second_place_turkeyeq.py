@@ -117,6 +117,25 @@ df = pd.DataFrame(rows)
 df = df[["id", "fold", "split", "nondamage", "minor", "major", "destroyed", "empty"]]
 df.to_csv(OUT / "folds.csv", index=False)
 
+# The second-place loader defines training rows as every row whose fold differs
+# from the validation fold. Keep test rows out of the training CSV entirely so
+# fold 2 can never leak into fine-tuning when validation uses fold 0.
+train_val_df = df[df["split"].isin(["train", "val"])].copy()
+train_val_df.to_csv(OUT / "folds_train_val.csv", index=False)
+
+train_ids = set(train_val_df[train_val_df["split"] == "train"]["id"].astype(str))
+val_ids = set(train_val_df[train_val_df["split"] == "val"]["id"].astype(str))
+test_ids = set(df[df["split"] == "test"]["id"].astype(str))
+
+if train_ids & val_ids or train_ids & test_ids or val_ids & test_ids:
+    raise RuntimeError("Earthquake Turkey train/val/test IDs are not disjoint")
+
+if set(train_val_df[train_val_df["fold"] != 0]["split"]) != {"train"}:
+    raise RuntimeError("folds_train_val.csv contains non-training rows outside fold 0")
+
+if set(train_val_df[train_val_df["fold"] == 0]["split"]) != {"val"}:
+    raise RuntimeError("folds_train_val.csv fold 0 is not exclusively validation")
+
 print("Prepared second-place Earthquake Turkey dataset from scratch")
 print("SRC:", SRC)
 print("OUT:", OUT)
@@ -129,5 +148,9 @@ print("Total image pairs:", len(df))
 print("Image symlinks:", len(list((OUT / "images").iterdir())))
 print("Mask symlinks:", len(list((OUT / "masks").iterdir())))
 print("folds.csv:", OUT / "folds.csv")
+print("Training folds:", OUT / "folds_train_val.csv")
+print("Training rows:", len(train_ids))
+print("Validation rows:", len(val_ids))
+print("Held-out test rows:", len(test_ids))
 print("folds.csv columns:", list(df.columns))
 print(df.head())

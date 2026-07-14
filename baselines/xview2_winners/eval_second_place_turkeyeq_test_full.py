@@ -2,6 +2,7 @@ import os
 import sys
 import csv
 import json
+import argparse
 from pathlib import Path
 
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -22,20 +23,25 @@ DATASET = Path("/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xvi
 TEST_IMAGES = DATASET / "images"
 TEST_MASKS = DATASET / "masks"
 
-OUT = Path("/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/second_place_earthquake_turkey_TEST_ONLY_ZERO_SHOT_full_solution")
-PRED_DIR = OUT / "predictions"
-LOC_DIR = PRED_DIR / "localization"
-DMG_DIR = PRED_DIR / "damage"
-PROB_DIR = OUT / "probabilities"
-
-for d in [OUT, PRED_DIR, LOC_DIR, DMG_DIR, PROB_DIR]:
-    d.mkdir(parents=True, exist_ok=True)
+ZERO_SHOT_OUT = Path("/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/second_place_earthquake_turkey_TEST_ONLY_ZERO_SHOT_full_solution")
+FT_EXP = Path("/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/second_place_earthquake_turkey_FULL_SOLUTION_finetune_official_split")
+FINETUNED_OUT = Path("/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/second_place_earthquake_turkey_FINE_TUNED_OFFICIAL_SPLIT_full_solution")
 
 sys.path.insert(0, str(REPO))
 os.chdir(REPO)
 
 import models
 from tools.config import load_config
+
+
+def parse_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--mode",
+        choices=["zero_shot", "zeroshot", "finetuned"],
+        default="zero_shot",
+    )
+    return ap.parse_args()
 
 
 def read_manifest(path):
@@ -65,6 +71,28 @@ def load_mask(path):
 
 def strip_module_state(state):
     return {k.replace("module.", ""): v for k, v in state.items()}
+
+
+def find_finetuned_checkpoint(row):
+    tag = row["tag"]
+    task = row["task"]
+
+    if task == "loc":
+        folder = FT_EXP / "weights_localization" / tag
+        patterns = ["*best_dice*", "*last*"]
+    else:
+        folder = FT_EXP / "weights_damage" / tag
+        patterns = ["*best_xview*", "*best_dice*", "*last*"]
+
+    if not folder.exists():
+        raise FileNotFoundError(f"Missing fine-tuned checkpoint folder: {folder}")
+
+    for pattern in patterns:
+        candidates = sorted(p for p in folder.glob(pattern) if p.is_file())
+        if candidates:
+            return str(candidates[0])
+
+    raise FileNotFoundError(f"No fine-tuned checkpoint found inside: {folder}")
 
 def get_normalize_for_channels(conf, channels):
     """
@@ -233,19 +261,43 @@ def binary_f1(gt, pred):
 
 
 def main():
+    args = parse_args()
     torch.backends.cudnn.benchmark = True
 
+    is_finetuned = args.mode == "finetuned"
+    if is_finetuned:
+        out = FINETUNED_OUT
+        label = "2nd-place xView2 full available ensemble FINE-TUNED on Earthquake Turkey official split"
+        note = "Fine-tuned on Turkey train, selected on Turkey validation, evaluated on held-out Turkey test."
+    else:
+        out = ZERO_SHOT_OUT
+        label = "2nd-place xView2 full available ensemble ZERO-SHOT on Earthquake Turkey TEST"
+        note = "No Earthquake Turkey fine-tuning used."
+
+    pred_dir = out / "predictions"
+    loc_dir = pred_dir / "localization"
+    dmg_dir = pred_dir / "damage"
+    prob_dir = out / "probabilities"
+
+    for directory in [out, pred_dir, loc_dir, dmg_dir, prob_dir]:
+        directory.mkdir(parents=True, exist_ok=True)
+
     rows = read_manifest(MANIFEST)
+
+    if is_finetuned:
+        for row in rows:
+            row["weight"] = find_finetuned_checkpoint(row)
+
     loc_rows = [r for r in rows if r["task"] == "loc"]
     dmg_rows = [r for r in rows if r["task"] == "damage"]
 
     print("================================================")
-    print("ZERO-SHOT xView2 2nd-place full available ensemble on Earthquake Turkey TEST")
-    print("No Earthquake Turkey TEST fine-tuning is performed.")
+    print(label)
+    print(note)
     print("================================================")
     print("Localization models:", len(loc_rows))
     print("Damage models:", len(dmg_rows))
-    print("Output:", OUT)
+    print("Output:", out)
 
     pre_images = sorted(TEST_IMAGES.glob("*_pre_disaster.png"))
     samples = []
@@ -352,11 +404,11 @@ def main():
         if loc_gt.shape != loc_pred.shape:
             raise RuntimeError(f"Shape mismatch for {sid}: gt {loc_gt.shape}, pred {loc_pred.shape}")
 
-        cv2.imwrite(str(LOC_DIR / f"{sid}_localization_prediction.png"), loc_pred.astype(np.uint8) * 255)
-        cv2.imwrite(str(DMG_DIR / f"{sid}_damage_prediction.png"), dmg_pred.astype(np.uint8))
+        cv2.imwrite(str(loc_dir / f"{sid}_localization_prediction.png"), loc_pred.astype(np.uint8) * 255)
+        cv2.imwrite(str(dmg_dir / f"{sid}_damage_prediction.png"), dmg_pred.astype(np.uint8))
 
-        np.save(PROB_DIR / f"{sid}_loc_prob.npy", loc_prob.astype(np.float16))
-        np.save(PROB_DIR / f"{sid}_damage_prob.npy", dmg_prob.astype(np.float16))
+        np.save(prob_dir / f"{sid}_loc_prob.npy", loc_prob.astype(np.float16))
+        np.save(prob_dir / f"{sid}_damage_prob.npy", dmg_prob.astype(np.float16))
 
         all_loc_gt.append(loc_gt.reshape(-1))
         all_loc_pr.append(loc_pred.reshape(-1))
@@ -373,7 +425,11 @@ def main():
             (3, "major_damage"),
             (4, "destroyed"),
         ]:
-            row[f"{cls_name}_f1"] = binary_f1(dmg_gt == cls_id, dmg_pred == cls_id)
+            valid = loc_gt > 0
+            row[f"{cls_name}_f1"] = binary_f1(
+                (dmg_gt == cls_id) & valid,
+                (dmg_pred == cls_id) & valid,
+            )
 
         per_image_rows.append(row)
 
@@ -381,6 +437,7 @@ def main():
     loc_pr = np.concatenate(all_loc_pr)
     dmg_gt = np.concatenate(all_dmg_gt)
     dmg_pr = np.concatenate(all_dmg_pr)
+    valid_damage = loc_gt > 0
 
     summary = {}
     summary["Localization_F1"] = binary_f1(loc_gt > 0, loc_pr > 0)
@@ -392,22 +449,29 @@ def main():
         (3, "Major_damage_F1"),
         (4, "Destroyed_F1"),
     ]:
-        f1 = binary_f1(dmg_gt == cls_id, dmg_pr == cls_id)
+        f1 = binary_f1(
+            (dmg_gt == cls_id) & valid_damage,
+            (dmg_pr == cls_id) & valid_damage,
+        )
         summary[cls_name] = f1
         class_scores.append(f1)
 
     summary["Macro_F1_damage_classes"] = float(np.nanmean(class_scores))
+    summary["Overall_xView2_style_score_0.3loc_0.7damage"] = (
+        0.3 * summary["Localization_F1"]
+        + 0.7 * summary["Macro_F1_damage_classes"]
+    )
 
-    with open(OUT / "metrics_summary.json", "w") as f:
+    with open(out / "metrics_summary.json", "w") as f:
         json.dump(summary, f, indent=2)
 
-    with open(OUT / "metrics_summary.txt", "w") as f:
-        f.write("2nd-place xView2 full available ensemble ZERO-SHOT on Earthquake Turkey TEST\n")
-        f.write("No Earthquake Turkey TEST fine-tuning used.\n\n")
+    with open(out / "metrics_summary.txt", "w") as f:
+        f.write(label + "\n")
+        f.write(note + "\n\n")
         for k, v in summary.items():
             f.write(f"{k}: {v:.6f}\n")
 
-    with open(OUT / "per_image_metrics.csv", "w", newline="") as f:
+    with open(out / "per_image_metrics.csv", "w", newline="") as f:
         fieldnames = [
             "id",
             "loc_f1",
@@ -422,17 +486,17 @@ def main():
             writer.writerow(row)
 
     print("================================================")
-    print("FINAL ZERO-SHOT RESULTS")
+    print("FINAL RESULTS")
     print("================================================")
     for k, v in summary.items():
         print(f"{k}: {v:.6f}")
 
     print("Saved:")
-    print(OUT / "metrics_summary.txt")
-    print(OUT / "metrics_summary.json")
-    print(OUT / "per_image_metrics.csv")
-    print(LOC_DIR)
-    print(DMG_DIR)
+    print(out / "metrics_summary.txt")
+    print(out / "metrics_summary.json")
+    print(out / "per_image_metrics.csv")
+    print(loc_dir)
+    print(dmg_dir)
 
 
 if __name__ == "__main__":
