@@ -47,9 +47,11 @@ def create_aliases():
         aliases[f"res50_cls_cce_{seed}_best"] = f"res50_cls_cce_{seed}_tuned_best"
 
         aliases[f"dpn92_cls_cce_{seed}_0_best"] = f"dpn92_cls_cce_{seed}_tuned_best"
+        aliases[f"dpn92_cls_cce_{seed}_1_best"] = f"dpn92_cls_cce_{seed}_tuned_best"
         aliases[f"dpn92_cls_cce_{seed}_best"] = f"dpn92_cls_cce_{seed}_tuned_best"
 
         aliases[f"se154_cls_cce_{seed}_0_best"] = f"se154_cls_cce_{seed}_tuned_best"
+        aliases[f"se154_cls_cce_{seed}_1_best"] = f"se154_cls_cce_{seed}_tuned_best"
         aliases[f"se154_cls_cce_{seed}_best"] = f"se154_cls_cce_{seed}_tuned_best"
 
     for alias, original in aliases.items():
@@ -62,6 +64,25 @@ def create_aliases():
         else:
             print(f"WARNING missing source: {original}")
 
+    required = []
+    for seed in [0, 1, 2]:
+        required.extend([
+            f"res50_loc_{seed}_0_best",
+            f"dpn92_loc_{seed}_0_best",
+            f"res34_cls2_{seed}_0_best",
+            f"res50_cls_cce_{seed}_0_best",
+            f"dpn92_cls_cce_{seed}_1_best",
+            f"se154_cls_cce_{seed}_1_best",
+        ])
+
+    missing = [name for name in required if not (FT / name).is_file()]
+    if missing:
+        raise FileNotFoundError(
+            "Missing checkpoints required by the Turkey fine-tuning scripts:\n"
+            + "\n".join(f"  - {name}" for name in missing)
+        )
+
+    print("Validated required fine-tuning checkpoints:", len(required))
     print("Total files now:", len(list(FT.iterdir())))
 
 
