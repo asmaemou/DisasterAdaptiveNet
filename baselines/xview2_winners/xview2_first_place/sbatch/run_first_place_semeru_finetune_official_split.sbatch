@@ -6,9 +6,9 @@
 #SBATCH --mem=96G
 #SBATCH --gres=gpu:rtx_pro_6000:1
 #SBATCH --time=24:00:00
-#SBATCH --job-name=xv2_1st_turkey_ftv
-#SBATCH --output=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/sbatch/logs/xv2_1st_turkey_ftv_%j.out
-#SBATCH --error=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/sbatch/logs/xv2_1st_turkey_ftv_%j.err
+#SBATCH --job-name=xv2_1st_semeru_ftv
+#SBATCH --output=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/sbatch/logs/xv2_1st_semeru_ftv_%j.out
+#SBATCH --error=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place/sbatch/logs/xv2_1st_semeru_ftv_%j.err
 
 set -euo pipefail
 set -x
@@ -16,23 +16,24 @@ export PYTHONUNBUFFERED=1
 
 BASE=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winners/xview2_first_place
 CUSTOM=$BASE/custom
-DATA=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baseline_datasets/first_place_earthquake_turkey_FINE_TUNE_OFFICIAL_SPLIT
-FT_WEIGHTS=$BASE/weights/earthquake_turkey_finetuned_weights_official_split
-PRED_SAVE=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/first_place_earthquake_turkey_FINE_TUNED_OFFICIAL_SPLIT_predictions
-FINAL_OUT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/first_place_earthquake_turkey_FINE_TUNED_OFFICIAL_SPLIT_full_solution
+DATA=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baseline_datasets/first_place_mount_semeru_FINE_TUNE_OFFICIAL_SPLIT
+FT_WEIGHTS=$BASE/weights/mount_semeru_finetuned_weights_official_split
+PRED_SAVE=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/first_place_mount_semeru_FINE_TUNED_OFFICIAL_SPLIT_predictions
+FINAL_OUT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/first_place_mount_semeru_FINE_TUNED_OFFICIAL_SPLIT_full_solution
 
 mkdir -p "$BASE/sbatch/logs"
-
 source ~/miniforge3/etc/profile.d/conda.sh
 conda activate disasteradaptivenet_cu128
-
 cd "$BASE"
 
-python -u "$CUSTOM/prepare_turkey_official_split_1024.py"
+echo "================================================"
+echo "Prepare leak-free Mount Semeru official split"
+echo "================================================"
+python -u "$CUSTOM/prepare_semeru_official_split_1024.py"
 python -u "$CUSTOM/patch_first_place_official_split.py"
 
 rm -rf "$FT_WEIGHTS"
-python -u "$CUSTOM/setup_turkey_ft_weights.py"
+python -u "$CUSTOM/setup_semeru_ft_weights.py"
 
 rm -rf train val test tier3 masks folds.csv
 ln -sfn "$DATA/train" train
@@ -55,55 +56,46 @@ export FT_EPOCHS=10
 export USE_OFFICIAL_VAL=1
 
 echo "================================================"
-echo "Fine-tune localization models"
+echo "Fine-tune Mount Semeru localization models"
 echo "================================================"
-
 python -u tune50_loc.py 0
 python -u tune50_loc.py 1
 python -u tune50_loc.py 2
-
 python -u tune92_loc.py 0
 python -u tune92_loc.py 1
 python -u tune92_loc.py 2
 
 echo "Refresh aliases after localization fine-tuning"
-python -u "$CUSTOM/setup_turkey_ft_weights.py"
-
-echo "Predict official validation localization masks"
+python -u "$CUSTOM/setup_semeru_ft_weights.py"
+echo "Predict official Mount Semeru validation localization masks"
 python -u predict_loc_val.py
 
 echo "================================================"
-echo "Fine-tune damage classification models"
+echo "Fine-tune Mount Semeru damage classification models"
 echo "================================================"
-
 python -u tune34_cls.py 0
 python -u tune34_cls.py 1
 python -u tune34_cls.py 2
-
 python -u tune50_cls_cce.py 0
 python -u tune50_cls_cce.py 1
 python -u tune50_cls_cce.py 2
-
 python -u tune92_cls_cce.py 0
 python -u tune92_cls_cce.py 1
 python -u tune92_cls_cce.py 2
-
 python -u tune154_cls_cce.py 0
 python -u tune154_cls_cce.py 1
 python -u tune154_cls_cce.py 2
 
 echo "Refresh aliases after classification fine-tuning"
-python -u "$CUSTOM/setup_turkey_ft_weights.py"
+python -u "$CUSTOM/setup_semeru_ft_weights.py"
 
 echo "================================================"
-echo "Predict on unseen Earthquake Turkey test set"
+echo "Predict on unseen Mount Semeru test set"
 echo "================================================"
-
 bash predict.sh
 
 SUB_COUNT=$(find submission -type f | wc -l)
 echo "Submission file count: $SUB_COUNT"
-
 if [ "$SUB_COUNT" -eq 0 ]; then
   echo "ERROR: submission is empty. Prediction failed."
   exit 1
@@ -117,8 +109,7 @@ python -u eval_first_place_submission.py \
   --pred-dir "$PRED_SAVE" \
   --out-dir "$FINAL_OUT" \
   --mode finetuned \
-  --dataset-name "Earthquake Turkey"
+  --dataset-name "Mount Semeru"
 
 cat "$FINAL_OUT/metrics_summary.txt"
-
-echo "DONE: 1st-place xView2 fine-tuned on Earthquake Turkey official train/val/test split"
+echo "DONE: 1st-place xView2 fine-tuned on Mount Semeru official train/val/test split"

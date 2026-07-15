@@ -23,25 +23,10 @@ def normalize_loc(arr):
 
 def normalize_damage(arr, loc=None):
     arr = arr.astype(np.int64)
-
-    # common cases:
-    # 0 background, 1-4 damage classes
-    # or 0-3 damage classes on building pixels
-    vals = set(np.unique(arr).tolist())
-
     out = arr.copy()
-
-    if max(vals) <= 3:
-        # interpret 0-3 as no/minor/major/destroyed and shift to 1-4
-        out = arr + 1
-        if loc is not None:
-            out[loc == 0] = 0
-
-    if max(vals) == 255:
-        # binary-style or strange scale; keep only valid class-like values
-        out = arr.copy()
-
     out[(out < 0) | (out > 4)] = 0
+    if loc is not None:
+        out[loc == 0] = 0
     return out.astype(np.uint8)
 
 
@@ -95,6 +80,8 @@ def main():
     ap.add_argument("--truth-dir", required=True)
     ap.add_argument("--pred-dir", required=True)
     ap.add_argument("--out-dir", required=True)
+    ap.add_argument("--mode", choices=["zero_shot", "finetuned"], default="zero_shot")
+    ap.add_argument("--dataset-name", default="target dataset")
     args = ap.parse_args()
 
     truth = Path(args.truth_dir)
@@ -192,7 +179,15 @@ def main():
     metrics["Overall_xView2_style_score_0.3loc_0.7damage"] = 0.3 * metrics["Localization_F1"] + 0.7 * metrics["Macro_F1_damage_classes"]
 
     lines = []
-    lines.append("1st-place xView2 winner ZERO-SHOT evaluation")
+    if args.mode == "finetuned":
+        lines.append(f"1st-place xView2 winner FINE-TUNED on {args.dataset_name} official split")
+        lines.append(
+            f"Fine-tuned on {args.dataset_name} train, selected on validation, "
+            f"evaluated on held-out test."
+        )
+    else:
+        lines.append("1st-place xView2 winner ZERO-SHOT evaluation")
+        lines.append(f"No {args.dataset_name} fine-tuning used.")
     lines.append(f"Truth: {truth}")
     lines.append(f"Pred:  {pred}")
     lines.append(f"Samples: {len(ids)}")
