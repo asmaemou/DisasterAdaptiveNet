@@ -86,49 +86,45 @@ echo "================================================"
 
 tail -n +2 "$MANIFEST" | while IFS=$'\t' read -r CHECKPOINT MODEL SEED CRITERION EXTRA_CRITERION; do
   SOURCE="$ORIGINAL_MODELS/$CHECKPOINT"
-  EXPERIMENT="turkey_ft_${CHECKPOINT%.pth}"
   TARGET="$FT_MODELS/$CHECKPOINT"
+  TEMP_TARGET="$TARGET.partial"
 
   if [ -f "$TARGET" ]; then
     echo "Already completed; skipping: $TARGET"
     continue
   fi
 
-  rm -rf "$WORK/runs/$EXPERIMENT"
+  rm -f "$TEMP_TARGET"
 
   CMD=(
-    python -u "$REPO/fit_predict.py"
+    python -u "$CUSTOM/finetune_third_place_turkey_native.py"
     --seed "$SEED"
     --data-dir "$DATA"
-    --experiment "$EXPERIMENT"
+    --source-checkpoint "$SOURCE"
+    --output-checkpoint "$TEMP_TARGET"
     --model "$MODEL"
     --batch-size "$TRAIN_BATCH_SIZE"
     --epochs "$FT_EPOCHS"
     --learning-rate 0.0001
-    --criterion "$CRITERION" 1
+    --criterion "$CRITERION"
+    --extra-criterion "$EXTRA_CRITERION"
     --workers 8
     --augmentations medium
     --fold 0
-    --scheduler cos
     --weight-decay 0.0001
     --size 512
-    --checkpoint "$SOURCE"
     --post-transform
+    --amp
   )
-
-  if [ "$EXTRA_CRITERION" != "none" ]; then
-    CMD+=(--criterion "$EXTRA_CRITERION" 1)
-  fi
 
   "${CMD[@]}"
 
-  TRAINED="$WORK/runs/$EXPERIMENT/main/checkpoints/$EXPERIMENT.pth"
-  if [ ! -f "$TRAINED" ]; then
-    echo "ERROR: fine-tuned checkpoint was not created: $TRAINED"
+  if [ ! -f "$TEMP_TARGET" ]; then
+    echo "ERROR: fine-tuned checkpoint was not created: $TEMP_TARGET"
     exit 1
   fi
 
-  cp -a "$TRAINED" "$TARGET"
+  mv "$TEMP_TARGET" "$TARGET"
   echo "Saved fine-tuned ensemble checkpoint: $TARGET"
 done
 
