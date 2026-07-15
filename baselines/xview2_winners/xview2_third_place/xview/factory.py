@@ -55,7 +55,7 @@ def predict(model: nn.Module, image: np.ndarray, image_size, normalize=A.Normali
     transform = A.Compose([normalize, A.Lambda(image=_tensor_from_rgb_image)])
 
     data = list(
-        {"image": patch, "coords": np.array(coords, dtype=np.int)}
+        {"image": patch, "coords": np.array(coords, dtype=np.int64)}
         for (patch, coords) in zip(patches, tile_slicer.crops)
     )
     for batch in DataLoader(InMemoryDataset(data, transform), pin_memory=True, batch_size=batch_size):

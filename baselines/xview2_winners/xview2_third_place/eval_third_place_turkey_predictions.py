@@ -9,6 +9,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--truth-dir", required=True)
 parser.add_argument("--pred-dir", required=True)
 parser.add_argument("--out-dir", required=True)
+parser.add_argument("--mode", choices=["zero_shot", "finetuned"], default="zero_shot")
 args = parser.parse_args()
 
 TRUTH = Path(args.truth_dir)
@@ -103,8 +104,10 @@ def find_pred(tile_id, kind):
         raise FileNotFoundError(f"No {kind} prediction found for {tile_id} under {PRED}")
     return hits[0]
 
-loc_scores = []
-class_scores = {1: [], 2: [], 3: [], 4: []}
+all_loc_true = []
+all_loc_pred = []
+all_damage_true = []
+all_damage_pred = []
 errors = []
 
 for tile_id in ids:
@@ -118,10 +121,16 @@ for tile_id in ids:
         gt_pre = resize_like(gt_pre, pred_loc.shape[:2])
         gt_post = resize_like(gt_post, pred_dmg.shape[:2])
 
-        loc_scores.append(f1_binary(pred_loc > 0, gt_pre > 0))
+        if pred_loc.shape != pred_dmg.shape:
+            raise ValueError(
+                f"Prediction shape mismatch for {tile_id}: "
+                f"localization {pred_loc.shape}, damage {pred_dmg.shape}"
+            )
 
-        for cls in [1, 2, 3, 4]:
-            class_scores[cls].append(f1_binary(pred_dmg == cls, gt_post == cls))
+        all_loc_true.append((gt_pre > 0).reshape(-1))
+        all_loc_pred.append((pred_loc > 0).reshape(-1))
+        all_damage_true.append(gt_post.reshape(-1))
+        all_damage_pred.append(pred_dmg.reshape(-1))
 
     except Exception as e:
         errors.append((tile_id, str(e)))
@@ -133,12 +142,30 @@ if errors:
     print("Total errors:", len(errors))
     raise SystemExit(2)
 
+loc_true = np.concatenate(all_loc_true)
+loc_pred = np.concatenate(all_loc_pred)
+damage_true = np.concatenate(all_damage_true)
+damage_pred = np.concatenate(all_damage_pred)
+valid_building = loc_true > 0
+
 metrics = {
-    "Localization_F1": float(np.mean(loc_scores)),
-    "No_damage_F1": float(np.mean(class_scores[1])),
-    "Minor_damage_F1": float(np.mean(class_scores[2])),
-    "Major_damage_F1": float(np.mean(class_scores[3])),
-    "Destroyed_F1": float(np.mean(class_scores[4])),
+    "Localization_F1": f1_binary(loc_pred, loc_true),
+    "No_damage_F1": f1_binary(
+        (damage_pred == 1) & valid_building,
+        (damage_true == 1) & valid_building,
+    ),
+    "Minor_damage_F1": f1_binary(
+        (damage_pred == 2) & valid_building,
+        (damage_true == 2) & valid_building,
+    ),
+    "Major_damage_F1": f1_binary(
+        (damage_pred == 3) & valid_building,
+        (damage_true == 3) & valid_building,
+    ),
+    "Destroyed_F1": f1_binary(
+        (damage_pred == 4) & valid_building,
+        (damage_true == 4) & valid_building,
+    ),
 }
 metrics["Macro_F1_damage_classes"] = float(np.mean([
     metrics["No_damage_F1"],
@@ -146,13 +173,25 @@ metrics["Macro_F1_damage_classes"] = float(np.mean([
     metrics["Major_damage_F1"],
     metrics["Destroyed_F1"],
 ]))
+metrics["Overall_xView2_style_score_0.3loc_0.7damage"] = (
+    0.3 * metrics["Localization_F1"]
+    + 0.7 * metrics["Macro_F1_damage_classes"]
+)
+
+if args.mode == "finetuned":
+    label = "3rd-place xView2 weighted ensemble FINE-TUNED on Earthquake Turkey official split"
+    note = "Fine-tuned on Turkey train, selected on Turkey validation, evaluated on held-out Turkey test."
+else:
+    label = "3rd-place xView2 weighted ensemble ZERO-SHOT on Earthquake Turkey TEST"
+    note = "No Earthquake Turkey fine-tuning used."
 
 with open(OUT / "metrics_summary.json", "w") as f:
     json.dump(metrics, f, indent=2)
 
 with open(OUT / "metrics_summary.txt", "w") as f:
-    f.write("3rd-place xView2 weighted ensemble ZERO-SHOT on Earthquake Turkey TEST\n")
-    f.write("No Earthquake Turkey fine-tuning used.\n\n")
+    f.write(label + "\n")
+    f.write(note + "\n\n")
+    f.write(f"Samples: {len(ids)}\n\n")
     for k, v in metrics.items():
         f.write(f"{k}: {v:.6f}\n")
 

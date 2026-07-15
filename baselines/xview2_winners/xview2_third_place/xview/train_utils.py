@@ -35,7 +35,7 @@ def report_checkpoint(checkpoint):
 
 
 def clean_checkpoint(src_fname, dst_fname):
-    checkpoint = torch.load(src_fname)
+    checkpoint = torch.load(src_fname, map_location="cpu", weights_only=False)
 
     keys = ["criterion_state_dict", "optimizer_state_dict", "scheduler_state_dict"]
 

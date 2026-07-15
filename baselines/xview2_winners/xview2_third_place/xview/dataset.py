@@ -85,7 +85,7 @@ def read_mask(fname):
 
 
 def compute_boundary_mask(mask: np.ndarray) -> np.ndarray:
-    dilated = binary_dilation(mask, structure=np.ones((5, 5), dtype=np.bool))
+    dilated = binary_dilation(mask, structure=np.ones((5, 5), dtype=np.bool_))
     dilated = binary_fill_holes(dilated)
 
     diff = dilated & ~mask
