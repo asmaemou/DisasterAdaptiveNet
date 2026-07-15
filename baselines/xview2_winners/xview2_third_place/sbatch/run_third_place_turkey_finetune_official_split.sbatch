@@ -23,7 +23,8 @@ DATA=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselin
 EXP_OUT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/third_place_earthquake_turkey_FULL_SOLUTION_finetune_official_split
 WORK=$EXP_OUT/work
 FT_MODELS=$EXP_OUT/models
-PRED_DIR=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/third_place_earthquake_turkey_FINE_TUNED_OFFICIAL_SPLIT_predictions
+PRED_BASE=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/third_place_earthquake_turkey_FINE_TUNED_OFFICIAL_SPLIT_predictions
+PRED_DIR=${PRED_BASE}_naive
 FINAL_OUT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/third_place_earthquake_turkey_FINE_TUNED_OFFICIAL_SPLIT_full_solution
 
 FT_EPOCHS=10
@@ -75,7 +76,7 @@ echo "================================================"
 if [ "$RESET_EXPERIMENT" = "1" ]; then
   rm -rf "$EXP_OUT"
 fi
-rm -rf "$PRED_DIR" "$FINAL_OUT"
+rm -rf "$PRED_BASE" "$PRED_DIR" "${PRED_BASE}_pseudolabeling" "$FINAL_OUT"
 mkdir -p "$WORK" "$FT_MODELS"
 
 cd "$WORK"
@@ -144,7 +145,7 @@ ln -sfn "$FT_MODELS" models
 
 python -u predict_37_weighted.py \
   --data-dir "$DATA" \
-  --output-dir "$PRED_DIR" \
+  --output-dir "$PRED_BASE" \
   --size 512 \
   --postprocessing naive \
   --activation model \
