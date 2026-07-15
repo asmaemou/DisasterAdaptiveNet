@@ -6,6 +6,13 @@ import random
 from pathlib import Path
 
 import numpy as np
+
+# Albumentations 0.x still references aliases removed by NumPy 1.24.  Define
+# them before importing xview.dataset so DataLoader workers inherit them too.
+for _name, _type in (("int", int), ("bool", bool), ("float", float)):
+    if _name not in np.__dict__:
+        setattr(np, _name, _type)
+
 import torch
 import torch.nn.functional as F
 from torch import nn
