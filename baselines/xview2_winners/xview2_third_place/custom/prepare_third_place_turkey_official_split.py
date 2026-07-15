@@ -5,11 +5,13 @@ import shutil
 from pathlib import Path
 
 import cv2
+import numpy as np
 import pandas as pd
 from PIL import Image
 
 RAW = Path("/homes/j244s673/documents/wsu/phd/earthquake_turkey_preprocessed")
 OUT = Path("/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baseline_datasets/third_place_earthquake_turkey_OFFICIAL_SPLIT")
+TARGET_SIZE = 1024
 
 FOLD_MAP = {
     "train": 1,
@@ -52,6 +54,65 @@ def validate_mask(path):
             image.load()
     except Exception as error:
         raise RuntimeError(f"PIL could not read mask: {path}: {error}") from error
+
+
+def fit_1024(image, is_mask=False):
+    width, height = image.size
+    if width == TARGET_SIZE and height == TARGET_SIZE:
+        return image
+
+    resample = Image.Resampling.NEAREST if is_mask else Image.Resampling.BILINEAR
+    return image.resize((TARGET_SIZE, TARGET_SIZE), resample=resample)
+
+
+def load_rgb_image(path):
+    path = Path(path)
+    try:
+        return Image.open(path).convert("RGB")
+    except Exception as pil_error:
+        array = cv2.imread(str(path), cv2.IMREAD_COLOR)
+        if array is None:
+            size = path.stat().st_size if path.exists() else -1
+            with path.open("rb") as stream:
+                first_bytes = stream.read(32)
+            raise RuntimeError(
+                f"Could not read image with PIL or OpenCV: {path}\n"
+                f"File size: {size}\n"
+                f"First bytes: {first_bytes}\n"
+                f"PIL error: {pil_error}"
+            )
+        return Image.fromarray(cv2.cvtColor(array, cv2.COLOR_BGR2RGB))
+
+
+def save_rgb_1024(source, destination):
+    image = load_rgb_image(source)
+    fit_1024(image, is_mask=False).save(destination)
+
+
+def read_mask(path):
+    path = Path(path)
+    try:
+        array = np.array(Image.open(path))
+    except Exception as pil_error:
+        array = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+        if array is None:
+            size = path.stat().st_size if path.exists() else -1
+            with path.open("rb") as stream:
+                first_bytes = stream.read(32)
+            raise RuntimeError(
+                f"Could not read mask with PIL or OpenCV: {path}\n"
+                f"File size: {size}\n"
+                f"First bytes: {first_bytes}\n"
+                f"PIL error: {pil_error}"
+            )
+    if array.ndim == 3:
+        array = array[:, :, 0]
+    return array.astype(np.uint8)
+
+
+def save_mask_1024(source, destination):
+    image = Image.fromarray(read_mask(source), mode="L")
+    fit_1024(image, is_mask=True).save(destination)
 
 
 def source_files(split, tile_id):
@@ -137,10 +198,10 @@ def main():
             out_pre_mask = Path(destination_split) / "masks" / f"{tile_id}_pre_disaster.png"
             out_post_mask = Path(destination_split) / "masks" / f"{tile_id}_post_disaster.png"
 
-            symlink_force(pre_image, OUT / out_pre_image)
-            symlink_force(post_image, OUT / out_post_image)
-            symlink_force(pre_mask, OUT / out_pre_mask)
-            symlink_force(post_mask, OUT / out_post_mask)
+            save_rgb_1024(pre_image, OUT / out_pre_image)
+            save_rgb_1024(post_image, OUT / out_post_image)
+            save_mask_1024(pre_mask, OUT / out_pre_mask)
+            save_mask_1024(post_mask, OUT / out_post_mask)
 
             if split == "test":
                 test_rows.append({"id": tile_id, "fold": 0})
@@ -176,6 +237,7 @@ def main():
     print("Held-out test samples:", len(test_ids))
     print("Training CSV rows:", len(train_folds))
     print("Test leakage: none")
+    print("All prepared images and masks: 1024x1024 PNG")
     print("train_folds.csv:", OUT / "train_folds.csv")
     print("folds.csv:", OUT / "folds.csv")
 
