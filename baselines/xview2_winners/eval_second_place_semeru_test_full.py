@@ -32,7 +32,11 @@ TEST_IMAGES = DATASET / "images"
 TEST_MASKS = DATASET / "masks"
 PRED_SIZE = 512
 
-OUT = Path("/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/second_place_mount_semeru_TEST_ONLY_ZERO_SHOT_full_solution")
+ZERO_SHOT_OUT = Path("/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/second_place_mount_semeru_TEST_ONLY_ZERO_SHOT_full_solution")
+FT_EXP = Path("/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/second_place_mount_semeru_FULL_SOLUTION_finetune_official_split")
+FINETUNED_OUT = Path("/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/second_place_mount_semeru_FINE_TUNED_OFFICIAL_SPLIT_full_solution")
+
+OUT = ZERO_SHOT_OUT
 PRED_DIR = OUT / "predictions"
 LOC_DIR = PRED_DIR / "localization"
 DMG_DIR = PRED_DIR / "damage"
@@ -132,16 +136,18 @@ def read_manifest():
                     or lower.get("checkpoint_path")
                     or lower.get("weights")
                     or lower.get("model_path")
+                    or lower.get("weight")
                     or ""
                 ).strip()
 
                 ensemble_weight = (
                     lower.get("ensemble_weight")
-                    or lower.get("weight")
                     or "1"
                 )
 
-                if not task:
+                if task == "loc":
+                    task = "localization"
+                elif not task:
                     if tag.startswith("loc"):
                         task = "localization"
                     elif tag.startswith("damage"):
@@ -185,6 +191,25 @@ def torch_load_checkpoint(path):
         return torch.load(path, map_location="cpu", weights_only=False)
     except TypeError:
         return torch.load(path, map_location="cpu")
+
+
+def find_finetuned_checkpoint(model_config):
+    if model_config.task == "localization":
+        folder = FT_EXP / "weights_localization" / model_config.tag
+        patterns = ["*best_dice*", "*last*"]
+    else:
+        folder = FT_EXP / "weights_damage" / model_config.tag
+        patterns = ["*best_xview*", "*best_dice*", "*last*"]
+
+    if not folder.exists():
+        raise FileNotFoundError(f"Missing fine-tuned checkpoint folder: {folder}")
+
+    for pattern in patterns:
+        candidates = sorted(p for p in folder.glob(pattern) if p.is_file())
+        if candidates:
+            return str(candidates[0])
+
+    raise FileNotFoundError(f"No fine-tuned checkpoint found inside: {folder}")
 
 
 def clean_state_dict(state_dict):
@@ -586,13 +611,36 @@ def collect_samples():
 
 
 def main():
+    global OUT, PRED_DIR, LOC_DIR, DMG_DIR, PROB_DIR
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", default="zero_shot", choices=["zero_shot"])
+    parser.add_argument(
+        "--mode",
+        default="zero_shot",
+        choices=["zero_shot", "zeroshot", "finetuned"],
+    )
     args = parser.parse_args()
 
+    is_finetuned = args.mode == "finetuned"
+    if is_finetuned:
+        OUT = FINETUNED_OUT
+        label = "2nd-place xView2 full available ensemble FINE-TUNED on Mount Semeru official split"
+        note = "Fine-tuned on Semeru train, selected on Semeru validation, evaluated on held-out Semeru test."
+    else:
+        OUT = ZERO_SHOT_OUT
+        label = "2nd-place xView2 full available ensemble ZERO-SHOT on Mount Semeru TEST"
+        note = "No Mount Semeru fine-tuning used."
+
+    PRED_DIR = OUT / "predictions"
+    LOC_DIR = PRED_DIR / "localization"
+    DMG_DIR = PRED_DIR / "damage"
+    PROB_DIR = OUT / "probabilities"
+    for directory in [OUT, PRED_DIR, LOC_DIR, DMG_DIR, PROB_DIR]:
+        directory.mkdir(parents=True, exist_ok=True)
+
     print("================================================")
-    print("ZERO-SHOT xView2 2nd-place full available ensemble on Mount Semeru TEST")
-    print("No Mount Semeru TEST fine-tuning is performed.")
+    print(label)
+    print(note)
     print("================================================")
 
     print("Device:", DEVICE)
@@ -602,6 +650,11 @@ def main():
     print("Output:", OUT)
 
     model_configs = read_manifest()
+    if is_finetuned:
+        model_configs = [
+            model_config._replace(weight_path=find_finetuned_checkpoint(model_config))
+            for model_config in model_configs
+        ]
     loc_models = [m for m in model_configs if m.task == "localization"]
     damage_models = [m for m in model_configs if m.task == "damage"]
 
@@ -716,8 +769,8 @@ def main():
         json.dump(metrics, f, indent=2)
 
     with open(OUT / "metrics_summary.txt", "w") as f:
-        f.write("2nd-place xView2 full available ensemble ZERO-SHOT on Mount Semeru TEST\n")
-        f.write("No Mount Semeru TEST fine-tuning used.\n\n")
+        f.write(label + "\n")
+        f.write(note + "\n\n")
         f.write(f"Localization_F1: {metrics['Localization_F1']:.6f}\n")
         f.write(f"No_damage_F1: {metrics['No_damage_F1']:.6f}\n")
         f.write(f"Minor_damage_F1: {metrics['Minor_damage_F1']:.6f}\n")
