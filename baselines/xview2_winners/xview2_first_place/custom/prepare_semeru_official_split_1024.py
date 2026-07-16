@@ -14,6 +14,7 @@ OUT = Path(
     "/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/"
     "xview2_baseline_datasets/first_place_mount_semeru_FINE_TUNE_OFFICIAL_SPLIT"
 )
+DATASET_NAME = "Mount Semeru"
 TARGET_SIZE = 1024
 
 
@@ -62,7 +63,9 @@ def source_files(split, tile_id):
     if post_mask is None:
         missing.append(f"post mask for {split}/{tile_id}")
     if missing:
-        raise FileNotFoundError("Missing required Semeru files:\n" + "\n".join(missing))
+        raise FileNotFoundError(
+            f"Missing required {DATASET_NAME} files:\n" + "\n".join(missing)
+        )
     return pre_image, post_image, pre_mask, post_mask
 
 
@@ -141,7 +144,7 @@ def normalize_masks(pre_mask, post_mask):
     values = set(np.unique(post_mask).astype(int).tolist())
     unexpected = sorted(values - {0, 1, 2, 3, 4})
     if unexpected:
-        raise ValueError(f"Unexpected Mount Semeru damage-mask values: {unexpected}")
+        raise ValueError(f"Unexpected {DATASET_NAME} damage-mask values: {unexpected}")
     damage = post_mask.astype(np.uint8)
     damage[localization == 0] = 0
     return localization * 255, damage
@@ -228,12 +231,12 @@ def main():
         split_ids["train"], split_ids["val"], split_ids["test"]
     )
     if train_ids & val_ids or train_ids & test_ids or val_ids & test_ids:
-        raise RuntimeError("Mount Semeru train/val/test IDs are not disjoint")
+        raise RuntimeError(f"{DATASET_NAME} train/val/test IDs are not disjoint")
 
     pd.DataFrame(manifest_rows).to_csv(OUT / "official_split_manifest.csv", index=False)
     pd.DataFrame(test_rows).to_csv(OUT / "folds.csv", index=False)
 
-    print("Prepared Mount Semeru official train/val/test split for 1st-place xView2")
+    print(f"Prepared {DATASET_NAME} official train/val/test split for 1st-place xView2")
     print("All images and masks saved as 1024x1024 PNG")
     print("Damage labels validated as xView2 classes 1-4 with background 0")
     print("Test leakage: none")

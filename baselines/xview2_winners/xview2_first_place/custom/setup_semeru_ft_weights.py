@@ -9,6 +9,7 @@ BASE = Path(
 )
 SRC = BASE / "weights" / "extracted_weights" / "weights"
 FT = BASE / "weights" / "mount_semeru_finetuned_weights_official_split"
+DATASET_NAME = "Mount Semeru"
 
 
 def copy_initial_weights():
@@ -20,7 +21,7 @@ def copy_initial_weights():
             destination = FT / source.name
             if not destination.exists():
                 shutil.copy2(source, destination)
-    print("Mount Semeru fine-tuning weight folder:", FT)
+    print(f"{DATASET_NAME} fine-tuning weight folder:", FT)
     print("Weight files before aliases:", len(list(FT.iterdir())))
 
 
@@ -71,7 +72,7 @@ def create_aliases():
     missing = [name for name in required if not (FT / name).is_file()]
     if missing:
         raise FileNotFoundError(
-            "Missing checkpoints required by the Semeru fine-tuning scripts:\n"
+            f"Missing checkpoints required by the {DATASET_NAME} fine-tuning scripts:\n"
             + "\n".join(f"  - {name}" for name in missing)
         )
     print("Validated required fine-tuning checkpoints:", len(required))
