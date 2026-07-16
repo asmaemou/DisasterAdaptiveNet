@@ -44,6 +44,10 @@ def parse_args():
     parser.add_argument("--augmentations", default="medium")
     parser.add_argument("--post-transform", action="store_true")
     parser.add_argument("--amp", action="store_true")
+    parser.add_argument(
+        "--finetuned-on",
+        default="Earthquake Turkey official train/validation split",
+    )
     return parser.parse_args()
 
 
@@ -207,7 +211,7 @@ def save_checkpoint(path, model, args, epoch, train_loss, valid_loss, metrics):
                 "model": args.model,
                 "fold": args.fold,
                 "source_checkpoint": str(args.source_checkpoint),
-                "finetuned_on": "Earthquake Turkey official train/validation split",
+                "finetuned_on": args.finetuned_on,
             }
         },
     }

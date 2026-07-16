@@ -11,6 +11,8 @@ from PIL import Image
 
 RAW = Path("/homes/j244s673/documents/wsu/phd/earthquake_turkey_preprocessed")
 OUT = Path("/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baseline_datasets/third_place_earthquake_turkey_OFFICIAL_SPLIT")
+EVENT_NAME = "earthquake-turkey"
+DATASET_LABEL = "Earthquake Turkey"
 TARGET_SIZE = 1024
 
 FOLD_MAP = {
@@ -148,7 +150,7 @@ def source_files(split, tile_id):
 
 def training_row(tile_id, event_type, image_path, mask_path, fold, sample_id):
     return {
-        "event_name": "earthquake-turkey",
+        "event_name": EVENT_NAME,
         "event_type": event_type,
         "folder": "train",
         "image_fname": image_path.as_posix(),
@@ -219,7 +221,7 @@ def main():
     val_ids = split_ids["val"]
     test_ids = split_ids["test"]
     if train_ids & val_ids or train_ids & test_ids or val_ids & test_ids:
-        raise RuntimeError("Earthquake Turkey train/val/test IDs are not disjoint")
+        raise RuntimeError(f"{DATASET_LABEL} train/val/test IDs are not disjoint")
 
     train_folds = pd.DataFrame(training_rows)
     train_folds.to_csv(OUT / "train_folds.csv", index=False)
@@ -230,7 +232,7 @@ def main():
     for name in ["images", "masks"]:
         symlink_force(OUT / "test" / name, OUT / name)
 
-    print("Prepared third-place Earthquake Turkey official split")
+    print(f"Prepared third-place {DATASET_LABEL} official split")
     print("OUT:", OUT)
     print("Training samples:", len(train_ids))
     print("Validation samples:", len(val_ids))
