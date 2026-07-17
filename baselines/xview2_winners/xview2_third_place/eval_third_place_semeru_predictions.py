@@ -10,6 +10,7 @@ parser.add_argument("--truth-dir", required=True)
 parser.add_argument("--pred-dir", required=True)
 parser.add_argument("--out-dir", required=True)
 parser.add_argument("--mode", choices=["zero_shot", "finetuned"], default="zero_shot")
+parser.add_argument("--dataset-name", default="Mount Semeru")
 args = parser.parse_args()
 
 TRUTH = Path(args.truth_dir)
@@ -179,11 +180,11 @@ metrics["Overall_xView2_style_score_0.3loc_0.7damage"] = (
 )
 
 if args.mode == "finetuned":
-    label = "3rd-place xView2 weighted ensemble FINE-TUNED on Mount Semeru official split"
-    note = "Fine-tuned on Semeru train, selected on Semeru validation, evaluated on held-out Semeru test."
+    label = f"3rd-place xView2 weighted ensemble FINE-TUNED on {args.dataset_name} official split"
+    note = f"Fine-tuned on {args.dataset_name} train, selected on {args.dataset_name} validation, evaluated on held-out {args.dataset_name} test."
 else:
-    label = "3rd-place xView2 weighted ensemble ZERO-SHOT on Mount Semeru TEST"
-    note = "No Mount Semeru fine-tuning used."
+    label = f"3rd-place xView2 weighted ensemble ZERO-SHOT on {args.dataset_name} TEST"
+    note = f"No {args.dataset_name} fine-tuning used."
 
 with open(OUT / "metrics_summary.json", "w") as f:
     json.dump(metrics, f, indent=2)

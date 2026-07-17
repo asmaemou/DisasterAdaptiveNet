@@ -19,13 +19,17 @@ CUSTOM=$REPO/custom
 MANIFEST=$CUSTOM/third_place_turkey_finetune_models.tsv
 ORIGINAL_MODELS=$REPO/weights/extracted/ensemble
 
-DATA=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baseline_datasets/third_place_mount_semeru_OFFICIAL_SPLIT
-EXP_OUT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/third_place_mount_semeru_FULL_SOLUTION_finetune_official_split
+TARGET_DATASET=${TARGET_DATASET:-mount_semeru}
+DATASET_LABEL=${DATASET_LABEL:-Mount Semeru}
+PREP_SCRIPT=${PREP_SCRIPT:-prepare_third_place_semeru_official_split.py}
+
+DATA=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baseline_datasets/third_place_${TARGET_DATASET}_OFFICIAL_SPLIT
+EXP_OUT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/third_place_${TARGET_DATASET}_FULL_SOLUTION_finetune_official_split
 WORK=$EXP_OUT/work
 FT_MODELS=$EXP_OUT/models
-PRED_BASE=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/third_place_mount_semeru_FINE_TUNED_OFFICIAL_SPLIT_predictions
+PRED_BASE=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/third_place_${TARGET_DATASET}_FINE_TUNED_OFFICIAL_SPLIT_predictions
 PRED_DIR=${PRED_BASE}_naive
-FINAL_OUT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/third_place_mount_semeru_FINE_TUNED_OFFICIAL_SPLIT_full_solution
+FINAL_OUT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/third_place_${TARGET_DATASET}_FINE_TUNED_OFFICIAL_SPLIT_full_solution
 
 FT_EPOCHS=10
 TRAIN_BATCH_SIZE=4
@@ -39,10 +43,10 @@ conda activate disasteradaptivenet_cu128
 export PYTHONPATH="$REPO:${PYTHONPATH:-}"
 
 echo "================================================"
-echo "Prepare leak-free Mount Semeru official split"
+echo "Prepare leak-free $DATASET_LABEL official split"
 echo "================================================"
 
-python -u "$CUSTOM/prepare_third_place_semeru_official_split.py"
+python -u "$CUSTOM/$PREP_SCRIPT"
 
 echo "================================================"
 echo "Validate the 13 released third-place ensemble checkpoints"
@@ -116,7 +120,7 @@ tail -n +2 "$MANIFEST" | while IFS=$'\t' read -r CHECKPOINT MODEL SEED CRITERION
     --size 512
     --post-transform
     --amp
-    --finetuned-on "Mount Semeru official train/validation split"
+    --finetuned-on "$DATASET_LABEL official train/validation split"
   )
 
   "${CMD[@]}"
@@ -155,15 +159,16 @@ python -u predict_37_weighted.py \
   --workers 0
 
 echo "================================================"
-echo "Evaluate on the held-out Mount Semeru test samples"
+echo "Evaluate on the held-out $DATASET_LABEL test samples"
 echo "================================================"
 
 python -u eval_third_place_semeru_predictions.py \
   --truth-dir "$DATA" \
   --pred-dir "$PRED_DIR" \
   --out-dir "$FINAL_OUT" \
-  --mode finetuned
+  --mode finetuned \
+  --dataset-name "$DATASET_LABEL"
 
 cat "$FINAL_OUT/metrics_summary.txt"
 
-echo "DONE: 3rd-place xView2 fine-tuned on Mount Semeru official train/val/test split"
+echo "DONE: 3rd-place xView2 fine-tuned on $DATASET_LABEL official train/val/test split"

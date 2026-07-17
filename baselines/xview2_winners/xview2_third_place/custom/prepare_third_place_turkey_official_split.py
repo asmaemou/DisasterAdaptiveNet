@@ -193,6 +193,13 @@ def main():
             validate_image(post_image)
             validate_mask(pre_mask)
             validate_mask(post_mask)
+            damage_values = set(np.unique(read_mask(post_mask)).astype(int).tolist())
+            unexpected = sorted(damage_values - {0, 1, 2, 3, 4})
+            if unexpected:
+                raise ValueError(
+                    f"Unexpected {DATASET_LABEL} damage-mask values for "
+                    f"{tile_id}: {unexpected}"
+                )
 
             destination_split = "test" if split == "test" else "train"
             out_pre_image = Path(destination_split) / "images" / f"{tile_id}_pre_disaster.png"
