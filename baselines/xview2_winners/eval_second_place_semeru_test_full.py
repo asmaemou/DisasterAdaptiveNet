@@ -611,6 +611,8 @@ def collect_samples():
 
 
 def main():
+    global DATASET, TEST_IMAGES, TEST_MASKS
+    global ZERO_SHOT_OUT, FT_EXP, FINETUNED_OUT
     global OUT, PRED_DIR, LOC_DIR, DMG_DIR, PROB_DIR
 
     parser = argparse.ArgumentParser()
@@ -619,17 +621,57 @@ def main():
         default="zero_shot",
         choices=["zero_shot", "zeroshot", "finetuned"],
     )
+    parser.add_argument(
+        "--dataset",
+        default="mount_semeru",
+        choices=["mount_semeru", "texas_tornadoes"],
+    )
     args = parser.parse_args()
+
+    if args.dataset == "texas_tornadoes":
+        dataset_slug = "texas_tornadoes"
+        dataset_label = "Texas Tornadoes"
+        short_label = "Texas Tornadoes"
+    else:
+        dataset_slug = "mount_semeru"
+        dataset_label = "Mount Semeru"
+        short_label = "Semeru"
+
+    output_root = Path(
+        "/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output"
+    )
+    DATASET = (
+        output_root
+        / "xview2_baseline_datasets"
+        / f"second_place_{dataset_slug}_TEST_ONLY"
+    )
+    TEST_IMAGES = DATASET / "images"
+    TEST_MASKS = DATASET / "masks"
+    ZERO_SHOT_OUT = (
+        output_root
+        / "xview2_baselines"
+        / f"second_place_{dataset_slug}_TEST_ONLY_ZERO_SHOT_full_solution"
+    )
+    FT_EXP = (
+        output_root
+        / "xview2_baselines"
+        / f"second_place_{dataset_slug}_FULL_SOLUTION_finetune_official_split"
+    )
+    FINETUNED_OUT = (
+        output_root
+        / "xview2_baselines"
+        / f"second_place_{dataset_slug}_FINE_TUNED_OFFICIAL_SPLIT_full_solution"
+    )
 
     is_finetuned = args.mode == "finetuned"
     if is_finetuned:
         OUT = FINETUNED_OUT
-        label = "2nd-place xView2 full available ensemble FINE-TUNED on Mount Semeru official split"
-        note = "Fine-tuned on Semeru train, selected on Semeru validation, evaluated on held-out Semeru test."
+        label = f"2nd-place xView2 full available ensemble FINE-TUNED on {dataset_label} official split"
+        note = f"Fine-tuned on {short_label} train, selected on {short_label} validation, evaluated on held-out {short_label} test."
     else:
         OUT = ZERO_SHOT_OUT
-        label = "2nd-place xView2 full available ensemble ZERO-SHOT on Mount Semeru TEST"
-        note = "No Mount Semeru fine-tuning used."
+        label = f"2nd-place xView2 full available ensemble ZERO-SHOT on {dataset_label} TEST"
+        note = f"No {dataset_label} fine-tuning used."
 
     PRED_DIR = OUT / "predictions"
     LOC_DIR = PRED_DIR / "localization"

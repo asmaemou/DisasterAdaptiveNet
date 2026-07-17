@@ -18,9 +18,15 @@ BASE=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/baselines/xview2_winn
 REPO=$BASE/xview2_second_place
 MANIFEST=$BASE/second_place_full_solution_manifest.tsv
 
-DATA_OUT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baseline_datasets/second_place_mount_semeru
+TARGET_DATASET=${TARGET_DATASET:-mount_semeru}
+DATASET_LABEL=${DATASET_LABEL:-Mount Semeru}
+TRAIN_PREFIX=${TRAIN_PREFIX:-semeru_official}
+PREP_SCRIPT=${PREP_SCRIPT:-prepare_second_place_semeru.py}
+TEST_VIEW_SCRIPT=${TEST_VIEW_SCRIPT:-make_second_place_semeru_test_view.py}
+
+DATA_OUT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baseline_datasets/second_place_${TARGET_DATASET}
 TRAIN_FOLDS=$DATA_OUT/folds_train_val.csv
-EXP_OUT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/second_place_mount_semeru_FULL_SOLUTION_finetune_official_split
+EXP_OUT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/second_place_${TARGET_DATASET}_FULL_SOLUTION_finetune_official_split
 
 FT_EPOCHS=10
 
@@ -30,12 +36,12 @@ source ~/miniforge3/etc/profile.d/conda.sh
 conda activate disasteradaptivenet_cu128
 
 echo "================================================"
-echo "Prepare Mount Semeru official train/val/test data"
+echo "Prepare $DATASET_LABEL official train/val/test data"
 echo "================================================"
 
 cd "$BASE"
-python -u prepare_second_place_semeru.py
-python -u make_second_place_semeru_test_view.py
+python -u "$PREP_SCRIPT"
+python -u "$TEST_VIEW_SCRIPT"
 
 echo "================================================"
 echo "Reset experiment output and create 10-epoch fine-tuning configs"
@@ -155,7 +161,7 @@ PY
     --output-dir "$MODEL_OUT/" \
     --resume "$INIT" \
     --fold 0 \
-    --prefix "semeru_official_${TAG}_" \
+    --prefix "${TRAIN_PREFIX}_${TAG}_" \
     --data-dir "$DATA_OUT" \
     --folds-csv "$TRAIN_FOLDS" \
     --logdir "$EXP_OUT/logs_localization/$TAG" \
@@ -206,7 +212,7 @@ PY
     --output-dir "$MODEL_OUT/" \
     --resume "$INIT" \
     --fold 0 \
-    --prefix "semeru_official_${TAG}_" \
+    --prefix "${TRAIN_PREFIX}_${TAG}_" \
     --data-dir "$DATA_OUT" \
     --folds-csv "$TRAIN_FOLDS" \
     --logdir "$EXP_OUT/logs_damage/$TAG" \
@@ -217,13 +223,15 @@ PY
 done
 
 echo "================================================"
-echo "Evaluate the fine-tuned full ensemble on held-out Semeru test"
+echo "Evaluate the fine-tuned full ensemble on held-out $DATASET_LABEL test"
 echo "================================================"
 
 cd "$BASE"
-python -u eval_second_place_semeru_test_full.py --mode finetuned
+python -u eval_second_place_semeru_test_full.py \
+  --mode finetuned \
+  --dataset "$TARGET_DATASET"
 
-METRICS=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/second_place_mount_semeru_FINE_TUNED_OFFICIAL_SPLIT_full_solution/metrics_summary.txt
+METRICS=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/xview2_baselines/second_place_${TARGET_DATASET}_FINE_TUNED_OFFICIAL_SPLIT_full_solution/metrics_summary.txt
 cat "$METRICS"
 
-echo "DONE: 2nd-place xView2 fine-tuned on Mount Semeru official train/val/test split"
+echo "DONE: 2nd-place xView2 fine-tuned on $DATASET_LABEL official train/val/test split"
