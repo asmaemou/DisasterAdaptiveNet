@@ -59,6 +59,7 @@ rm -rf "$PRED_SAVE" "$FINAL_OUT"
 export MODELS_FOLDER="$FT_WEIGHTS"
 export FT_EPOCHS=10
 export USE_OFFICIAL_VAL=1
+export SUBMISSION_WORKERS=4
 
 echo "================================================"
 echo "Fine-tune $DATASET_LABEL localization models"

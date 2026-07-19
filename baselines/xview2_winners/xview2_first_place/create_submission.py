@@ -79,7 +79,9 @@ if __name__ == '__main__':
         if '_part1.png' in f:
             all_files.append(f)
 
-    with Pool() as pool:
+    submission_workers = max(1, int(os.environ.get('SUBMISSION_WORKERS', '4')))
+    print('Submission workers:', submission_workers)
+    with Pool(processes=submission_workers) as pool:
         _ = pool.map(process_image, all_files)
 
     elapsed = timeit.default_timer() - t0
