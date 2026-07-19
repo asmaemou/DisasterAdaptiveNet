@@ -16,6 +16,7 @@ TEST = Path(
     "/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/"
     "xview2_baseline_datasets/second_place_texas_tornadoes_TEST_ONLY"
 )
+DATASET_NAME = "Texas Tornadoes"
 
 
 def link(source, destination):
@@ -29,7 +30,7 @@ def main():
     folds = pd.read_csv(FULL / "folds.csv")
     test_folds = folds[folds["split"].astype(str).str.lower() == "test"].copy()
     if test_folds.empty:
-        raise RuntimeError("No Texas Tornadoes test rows found")
+        raise RuntimeError(f"No {DATASET_NAME} test rows found")
 
     if TEST.exists():
         shutil.rmtree(TEST)
@@ -51,13 +52,15 @@ def main():
                 link(source, TEST / folder / source.name)
 
     if missing:
-        raise FileNotFoundError("Missing Texas test files:\n" + "\n".join(missing[:50]))
+        raise FileNotFoundError(
+            f"Missing {DATASET_NAME} test files:\n" + "\n".join(missing[:50])
+        )
 
     test_folds["fold"] = 0
     columns = ["id", "fold", "nondamage", "minor", "major", "destroyed", "empty"]
     test_folds[columns].to_csv(TEST / "folds.csv", index=False)
 
-    print("Created Texas Tornadoes TEST_ONLY folder")
+    print(f"Created {DATASET_NAME} TEST_ONLY folder")
     print("TEST:", TEST)
     print("Test samples:", len(test_folds))
     print("Image links:", len(list((TEST / "images").iterdir())))

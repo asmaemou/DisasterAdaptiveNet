@@ -15,6 +15,7 @@ OUT = Path(
     "/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/output/"
     "xview2_baseline_datasets/second_place_texas_tornadoes"
 )
+DATASET_NAME = "Texas Tornadoes"
 
 SPLITS = ["train", "val", "test"]
 FOLD_MAP = {"train": 1, "val": 0, "test": 2}
@@ -102,7 +103,7 @@ def main():
             unexpected = sorted(set(np.unique(damage).astype(int)) - {0, 1, 2, 3, 4})
             if unexpected:
                 raise ValueError(
-                    f"Unexpected Texas Tornadoes damage-mask values for {tile_id}: "
+                    f"Unexpected {DATASET_NAME} damage-mask values for {tile_id}: "
                     f"{unexpected}"
                 )
 
@@ -146,13 +147,13 @@ def main():
     test_ids = set(folds[folds["split"] == "test"]["id"].astype(str))
 
     if train_ids & val_ids or train_ids & test_ids or val_ids & test_ids:
-        raise RuntimeError("Texas Tornadoes train/val/test IDs are not disjoint")
+        raise RuntimeError(f"{DATASET_NAME} train/val/test IDs are not disjoint")
     if set(train_val[train_val["fold"] != 0]["split"]) != {"train"}:
         raise RuntimeError("Training folds contain non-training rows outside fold 0")
     if set(train_val[train_val["fold"] == 0]["split"]) != {"val"}:
         raise RuntimeError("Training folds contain non-validation rows in fold 0")
 
-    print("Prepared Texas Tornadoes for second-place xView2 fine-tuning")
+    print(f"Prepared {DATASET_NAME} for second-place xView2 fine-tuning")
     print("SRC:", SRC)
     print("OUT:", OUT)
     print("Split counts:")
