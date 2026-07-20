@@ -624,11 +624,20 @@ def main():
     parser.add_argument(
         "--dataset",
         default="mount_semeru",
-        choices=["mount_semeru", "texas_tornadoes", "hurricane_delta"],
+        choices=[
+            "mount_semeru",
+            "texas_tornadoes",
+            "hurricane_delta",
+            "pakistan_flooding",
+        ],
     )
     args = parser.parse_args()
 
-    if args.dataset == "hurricane_delta":
+    if args.dataset == "pakistan_flooding":
+        dataset_slug = "pakistan_flooding"
+        dataset_label = "Pakistan Flooding"
+        short_label = "Pakistan Flooding"
+    elif args.dataset == "hurricane_delta":
         dataset_slug = "hurricane_delta"
         dataset_label = "Hurricane Delta"
         short_label = "Hurricane Delta"
