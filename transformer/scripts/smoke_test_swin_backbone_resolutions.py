@@ -34,6 +34,13 @@ def load_backbone_class():
 
     spec = importlib.util.spec_from_file_location("hrtbda_swin_module", TRAIN_SCRIPT)
     module = importlib.util.module_from_spec(spec)
+    # Must be registered in sys.modules BEFORE exec_module runs: the training
+    # script defines @dataclass classes (e.g. XBDSample), and dataclasses
+    # resolves annotation types via sys.modules[cls.__module__] while the
+    # class body executes. A normal `python train_xbd_...py` run registers
+    # __main__ automatically; this manual importlib load does not, unless we
+    # do it here ourselves.
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module.SwinPretrainedBackbone
 
