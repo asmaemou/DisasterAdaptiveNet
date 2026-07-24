@@ -796,19 +796,62 @@ class SwinPretrainedBackbone(nn.Module):
                 "(pip install timm) for pretrained Swin Transformer weights."
             ) from exc
 
+        # This backbone must handle two different resolutions with the SAME
+        # instance: HRTBDAPhase2 trains on --phase2-crop-size crops but
+        # validates/tests at --img-size (see make_loaders(): val/test datasets
+        # always use args.img_size, only the train split uses phase2_crop_size).
+        # timm's default Swin PatchEmbed hard-asserts the input resolution
+        # matches whatever img_size the model was built with, so a fixed
+        # img_size here breaks the moment training and eval resolutions
+        # differ. dynamic_img_size=True (and dynamic_img_pad=True as a second
+        # safety net) tells timm's PatchEmbed to skip that assertion and
+        # compute patch counts from the actual input shape at each forward
+        # call instead -- this is the documented mechanism for exactly this
+        # variable-resolution scenario. We try progressively simpler kwarg
+        # combinations in case this timm version/variant doesn't accept one
+        # of them, and log which combination actually worked so it is visible
+        # in the training log rather than silently assumed.
         create_kwargs = dict(pretrained=pretrained, features_only=True)
-        try:
-            create_kwargs_with_fmt = dict(create_kwargs, output_fmt="NCHW")
-            self.model = timm.create_model(variant, img_size=img_size, **create_kwargs_with_fmt)
-        except TypeError:
+        attempts = [
+            dict(create_kwargs, img_size=img_size, output_fmt="NCHW", dynamic_img_size=True, dynamic_img_pad=True),
+            dict(create_kwargs, img_size=img_size, dynamic_img_size=True, dynamic_img_pad=True),
+            dict(create_kwargs, img_size=img_size, dynamic_img_size=True),
+            dict(create_kwargs, dynamic_img_size=True),
+            dict(create_kwargs, img_size=img_size, output_fmt="NCHW"),
+            dict(create_kwargs, img_size=img_size),
+            dict(create_kwargs),
+        ]
+
+        self.model = None
+        last_exc: Optional[Exception] = None
+        used_kwargs = None
+        for kwargs in attempts:
             try:
-                self.model = timm.create_model(variant, img_size=img_size, **create_kwargs)
-            except TypeError:
-                # Some timm versions/variants don't accept img_size for features_only
-                # models. Swin's relative position bias is window-size-relative (not
-                # image-size-relative), so falling back to the pretrained default is
-                # safe as long as the divisibility check above already passed.
-                self.model = timm.create_model(variant, **create_kwargs)
+                self.model = timm.create_model(variant, **kwargs)
+                used_kwargs = kwargs
+                break
+            except TypeError as exc:
+                last_exc = exc
+                continue
+
+        if self.model is None:
+            raise RuntimeError(
+                f"Could not construct timm model '{variant}' with any supported kwarg "
+                f"combination (tried {len(attempts)} variants). Last error: {last_exc}"
+            )
+
+        print(
+            f"SwinPretrainedBackbone: constructed '{variant}' with kwargs={used_kwargs}",
+            flush=True,
+        )
+        if not used_kwargs.get("dynamic_img_size"):
+            print(
+                "WARNING: dynamic_img_size was not accepted for this timm variant/version. "
+                "This backbone will only work at a single fixed resolution -- if --img-size "
+                "and --phase2-crop-size differ, expect a PatchEmbed input-size assertion "
+                "failure the first time the other resolution is used.",
+                flush=True,
+            )
 
         feature_info = self.model.feature_info.get_dicts()
         self.channels = [f["num_chs"] for f in feature_info]
