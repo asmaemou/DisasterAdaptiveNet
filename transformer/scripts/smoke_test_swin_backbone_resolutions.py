@@ -84,8 +84,18 @@ def main() -> None:
     SwinPretrainedBackbone = load_backbone_class()
 
     img_size = 896
-    phase2_crop_size = 672
 
+    # NOTE: this used to also forward-pass the backbone directly at
+    # phase2_crop_size (672). That is no longer meaningful: timm's classic
+    # Swin precomputes its shifted-window attention mask for a single fixed
+    # resolution at construction time and does not recompute it per forward
+    # call, so one backbone instance genuinely cannot handle two different
+    # resolutions. Instead of fighting that, XBDHRTBDADataset now resizes
+    # any --phase2-crop-size crop back up to --img-size before it ever
+    # reaches the model (see the resize_rgb_and_masks call right after
+    # rare_damage_candidate_crop in __getitem__) -- the backbone is only
+    # ever called at img_size in the real pipeline, so that is the only
+    # resolution worth smoke-testing here.
     print(f"\nConstructing backbone with img_size={img_size} (this downloads ImageNet "
           f"weights on first run if not already cached -- may take a minute) ...", flush=True)
     backbone = SwinPretrainedBackbone(
@@ -99,9 +109,11 @@ def main() -> None:
     backbone.eval()
     print(f"Backbone channels per stage: {backbone.channels}", flush=True)
 
+    # Two calls in a row on the same instance, matching how the real training
+    # loop reuses one backbone object across many batches.
     results = {
-        "img_size (Phase I + Phase II val/test)": check_one_resolution(backbone, img_size, "img_size"),
-        "phase2_crop_size (Phase II train crops)": check_one_resolution(backbone, phase2_crop_size, "phase2_crop_size"),
+        "img_size, call 1 (e.g. Phase I train batch)": check_one_resolution(backbone, img_size, "img_size call 1"),
+        "img_size, call 2 (e.g. Phase II val/test batch)": check_one_resolution(backbone, img_size, "img_size call 2"),
     }
 
     print("\n===== SUMMARY =====", flush=True)
@@ -111,10 +123,11 @@ def main() -> None:
         all_ok = all_ok and ok
 
     if not all_ok:
-        print("\nAt least one resolution failed. Do not submit the full sbatch job yet.", flush=True)
+        print("\nAt least one call failed. Do not submit the full sbatch job yet.", flush=True)
         sys.exit(1)
 
-    print("\nBoth resolutions passed on CPU. Safe to submit the full sbatch job.", flush=True)
+    print("\nBackbone works at img_size (the only resolution it will ever see in the "
+          "real pipeline now). Safe to submit the full sbatch job.", flush=True)
 
 
 if __name__ == "__main__":

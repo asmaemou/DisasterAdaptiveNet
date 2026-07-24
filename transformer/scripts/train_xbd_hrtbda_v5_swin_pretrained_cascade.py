@@ -490,6 +490,24 @@ class XBDHRTBDADataset(Dataset):
                 class_weights=self.crop_class_weights,
             )
 
+            if self.crop_size != self.image_size:
+                # SwinPretrainedBackbone is one instance shared across this
+                # phase's train/val/test calls; timm's Swin (PatchEmbed's
+                # strict_img_size can be patched around, but the shifted-window
+                # attention mask is precomputed for a single fixed resolution
+                # and does not recompute per forward call) only works
+                # correctly at the resolution it was constructed with. Resize
+                # the selected crop back up to image_size so every tensor this
+                # backbone ever sees is the same size -- this keeps the
+                # rare-class crop *selection* benefit (which pixels end up in
+                # the frame) while giving up the smaller-tensor compute/memory
+                # savings crop_size < image_size would otherwise provide.
+                [pre, post], [loc_raw, target5] = resize_rgb_and_masks(
+                    image_list=[pre, post],
+                    mask_list=[loc_raw, target5],
+                    image_size=self.image_size,
+                )
+
         loc = (loc_raw > 0).astype(np.float32)
 
         return {
