@@ -823,7 +823,20 @@ class SwinPretrainedBackbone(nn.Module):
             )
 
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
-        return list(self.model(x))
+        feats = list(self.model(x))
+        out = []
+        for i, feat in enumerate(feats):
+            expected_c = self.channels[i]
+            if feat.shape[1] != expected_c and feat.shape[-1] == expected_c:
+                # timm returned this stage as NHWC (channels-last) instead of NCHW,
+                # despite requesting output_fmt="NCHW" at construction -- observed on
+                # at least one timm version for the Swin family. CSFModule /
+                # MultiScaleDecoder are nn.Conv2d-based and require NCHW, so
+                # self-correct here based on the actual tensor shape rather than
+                # trusting the creation-time flag.
+                feat = feat.permute(0, 3, 1, 2).contiguous()
+            out.append(feat)
+        return out
 
 class MultiScaleDecoder(nn.Module):
     def __init__(self, in_channels: List[int], decoder_channels: int, out_channels: int):
