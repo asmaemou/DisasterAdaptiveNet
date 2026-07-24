@@ -800,54 +800,54 @@ class SwinPretrainedBackbone(nn.Module):
         # instance: HRTBDAPhase2 trains on --phase2-crop-size crops but
         # validates/tests at --img-size (see make_loaders(): val/test datasets
         # always use args.img_size, only the train split uses phase2_crop_size).
-        # timm's default Swin PatchEmbed hard-asserts the input resolution
-        # matches whatever img_size the model was built with, so a fixed
-        # img_size here breaks the moment training and eval resolutions
-        # differ. dynamic_img_size=True (and dynamic_img_pad=True as a second
-        # safety net) tells timm's PatchEmbed to skip that assertion and
-        # compute patch counts from the actual input shape at each forward
-        # call instead -- this is the documented mechanism for exactly this
-        # variable-resolution scenario. We try progressively simpler kwarg
-        # combinations in case this timm version/variant doesn't accept one
-        # of them, and log which combination actually worked so it is visible
-        # in the training log rather than silently assumed.
-        create_kwargs = dict(pretrained=pretrained, features_only=True)
-        attempts = [
-            dict(create_kwargs, img_size=img_size, output_fmt="NCHW", dynamic_img_size=True, dynamic_img_pad=True),
-            dict(create_kwargs, img_size=img_size, dynamic_img_size=True, dynamic_img_pad=True),
-            dict(create_kwargs, img_size=img_size, dynamic_img_size=True),
-            dict(create_kwargs, dynamic_img_size=True),
-            dict(create_kwargs, img_size=img_size, output_fmt="NCHW"),
-            dict(create_kwargs, img_size=img_size),
-            dict(create_kwargs),
-        ]
+        #
+        # timm's PatchEmbed (timm/layers/patch_embed.py) gates its strict
+        # input-resolution assertion on a per-instance self.strict_img_size
+        # attribute:
+        #     if self.img_size is not None:
+        #         if self.strict_img_size:
+        #             _assert(H == self.img_size[0], ...)
+        #             _assert(W == self.img_size[1], ...)
+        #         elif not self.dynamic_img_pad:
+        #             _assert(H % patch_size == 0, ...)
+        # Passing dynamic_img_size=True to timm.create_model() is NOT reliably
+        # wired through to strict_img_size=False for every model builder
+        # (confirmed empirically for the classic Swin v1 family via
+        # smoke_test_swin_backbone_resolutions.py: the kwarg is accepted
+        # without error but the assertion still fires). So instead of relying
+        # on that kwarg, force strict_img_size=False directly on every
+        # submodule that has the attribute, after construction. This targets
+        # the exact flag forward() checks, not a guess at which constructor
+        # kwarg maps onto it. dynamic_img_pad=True is also set as a no-cost
+        # safety net for the patch-size divisibility branch (irrelevant for
+        # any --img-size / --phase2-crop-size that already passes the
+        # divisibility check above, since both are multiples of patch_size).
+        create_kwargs = dict(pretrained=pretrained, features_only=True, output_fmt="NCHW")
+        try:
+            self.model = timm.create_model(variant, img_size=img_size, **create_kwargs)
+        except TypeError:
+            # Some timm versions/variants don't accept img_size/output_fmt for
+            # features_only models.
+            self.model = timm.create_model(variant, **dict(pretrained=pretrained, features_only=True))
 
-        self.model = None
-        last_exc: Optional[Exception] = None
-        used_kwargs = None
-        for kwargs in attempts:
-            try:
-                self.model = timm.create_model(variant, **kwargs)
-                used_kwargs = kwargs
-                break
-            except TypeError as exc:
-                last_exc = exc
-                continue
-
-        if self.model is None:
-            raise RuntimeError(
-                f"Could not construct timm model '{variant}' with any supported kwarg "
-                f"combination (tried {len(attempts)} variants). Last error: {last_exc}"
-            )
+        patched_modules = 0
+        for module in self.model.modules():
+            if hasattr(module, "strict_img_size"):
+                module.strict_img_size = False
+                patched_modules += 1
+            if hasattr(module, "dynamic_img_pad"):
+                module.dynamic_img_pad = True
 
         print(
-            f"SwinPretrainedBackbone: constructed '{variant}' with kwargs={used_kwargs}",
+            f"SwinPretrainedBackbone: constructed '{variant}', patched "
+            f"strict_img_size=False on {patched_modules} submodule(s) so a single "
+            f"instance can handle both --img-size and --phase2-crop-size.",
             flush=True,
         )
-        if not used_kwargs.get("dynamic_img_size"):
+        if patched_modules == 0:
             print(
-                "WARNING: dynamic_img_size was not accepted for this timm variant/version. "
-                "This backbone will only work at a single fixed resolution -- if --img-size "
+                "WARNING: found no submodule with a strict_img_size attribute to patch. "
+                "This backbone may only work at a single fixed resolution -- if --img-size "
                 "and --phase2-crop-size differ, expect a PatchEmbed input-size assertion "
                 "failure the first time the other resolution is used.",
                 flush=True,
