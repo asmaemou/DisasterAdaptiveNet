@@ -86,6 +86,17 @@ export_member() {
 
 export_member "$SWIN_EXPERIMENT" "$SWIN_RAW" "Swin-T"
 export_member "$PVT_EXPERIMENT" "$PVT_RAW" "PVTv2-B2"
+
+# Twins features_only support comes from the isolated timm 1.x runtime created
+# by its training task.  Use it only for the Twins export; the shared Conda
+# environment is not modified.
+TIMM_RUNTIME=$PROJECT_ROOT/output/three_transformer_timm_runtime
+if [ ! -d "$TIMM_RUNTIME/timm" ]; then
+  echo "ERROR: isolated Twins timm runtime is missing: $TIMM_RUNTIME"
+  exit 1
+fi
+export PYTHONPATH="$TIMM_RUNTIME${PYTHONPATH:+:$PYTHONPATH}"
+python -c "import timm; print('Twins export timm version:', timm.__version__)"
 export_member "$TWINS_EXPERIMENT" "$TWINS_RAW" "Twins-SVT-S"
 
 echo "===== Equal probability averaging and evaluation ====="

@@ -54,6 +54,22 @@ fi
 eval "$("$CONDA_EXE" shell.bash hook)"
 conda activate disasteradaptivenet_cu128
 
+# Older timm releases construct Twins for classification but reject
+# features_only=True.  Install a current timm package into an experiment-local
+# directory for the Twins task only.  This leaves the shared Conda environment
+# untouched and provides the multiscale feature interface added in timm 1.x.
+if [ "${SLURM_ARRAY_TASK_ID}" -eq 1 ]; then
+  TIMM_RUNTIME=$PROJECT_ROOT/output/three_transformer_timm_runtime
+  mkdir -p "$TIMM_RUNTIME"
+  python -m pip install \
+    --disable-pip-version-check \
+    --no-deps \
+    --upgrade \
+    --target "$TIMM_RUNTIME" \
+    "timm>=1.0.3,<2"
+  export PYTHONPATH="$TIMM_RUNTIME${PYTHONPATH:+:$PYTHONPATH}"
+fi
+
 echo "===== EARTHQUAKE TURKEY TRANSFORMER MEMBER TRAINING ====="
 date
 hostname
@@ -77,6 +93,22 @@ if ! python -c "import timm" >/dev/null 2>&1; then
   exit 1
 fi
 python -c "import timm; print('timm version:', timm.__version__)"
+
+if [ "${SLURM_ARRAY_TASK_ID}" -eq 1 ]; then
+  python - <<'PY'
+import timm
+
+model = timm.create_model(
+    "twins_svt_small",
+    pretrained=False,
+    features_only=True,
+)
+feature_count = len(model.feature_info)
+if feature_count != 4:
+    raise RuntimeError(f"Expected four Twins feature stages, got {feature_count}")
+print("Twins multiscale feature preflight passed:", model.feature_info)
+PY
+fi
 
 python -u transformer/scripts/check_idabd_xbd_format.py \
   --root "$TURKEY_ROOT" \
