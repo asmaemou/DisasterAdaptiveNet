@@ -215,6 +215,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--thresholds", default="0.3,0.4,0.5,0.6,0.7")
     parser.add_argument("--expected-val-samples", type=int, default=93)
     parser.add_argument("--expected-test-samples", type=int, default=95)
+    parser.add_argument(
+        "--experiment-label",
+        default="Validation-tuned soft ensemble: HRTBDA-v5 + first-place xView2, Earthquake Turkey",
+    )
+    parser.add_argument("--hrtbda-label", default="HRTBDA-v5")
+    parser.add_argument("--first-place-label", default="first-place xView2")
     return parser.parse_args()
 
 
@@ -266,6 +272,9 @@ def main() -> None:
     validation_metrics = {
         "hrtbda": evaluate(validation, "hrtbda"),
         "first_place": evaluate(validation, "first_place"),
+        "hybrid_equal_0.5": evaluate(
+            validation, "hybrid", alpha=0.5, beta=0.5, threshold=0.5
+        ),
         "hybrid_selected": {
             key: best[key]
             for key in (
@@ -293,6 +302,9 @@ def main() -> None:
     test_metrics = {
         "hrtbda": evaluate(test, "hrtbda"),
         "first_place": evaluate(test, "first_place"),
+        "hybrid_equal_0.5": evaluate(
+            test, "hybrid", alpha=0.5, beta=0.5, threshold=0.5
+        ),
         "hybrid_selected": evaluate(
             test, "hybrid", alpha=alpha, beta=beta, threshold=threshold
         ),
@@ -306,8 +318,13 @@ def main() -> None:
     )
 
     summary = {
-        "experiment": "Validation-tuned soft ensemble: HRTBDA-v5 + first-place xView2, Earthquake Turkey",
+        "experiment": args.experiment_label,
+        "branches": {
+            "hrtbda": args.hrtbda_label,
+            "first_place": args.first_place_label,
+        },
         "selection_rule": "alpha, beta, and localization threshold selected only on Turkey validation; test evaluated once",
+        "fixed_equal_ensemble_rule": "alpha=0.5, beta=0.5, localization threshold=0.5; no parameter selected on test",
         "alpha_definition": "weight assigned to HRTBDA localization probability",
         "beta_definition": "weight assigned to HRTBDA damage probability",
         "selected_parameters": {
@@ -327,8 +344,11 @@ def main() -> None:
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 
     text_lines = [
-        "HRTBDA-v5 + first-place xView2 soft ensemble on Earthquake Turkey",
+        args.experiment_label,
+        f"Branch A: {args.hrtbda_label}",
+        f"Branch B: {args.first_place_label}",
         "Fusion parameters selected on validation only; test evaluated once.",
+        "A fixed equal-weight 0.5/0.5 ensemble is also reported.",
         "",
         f"Selected HRTBDA localization weight: {alpha:.2f}",
         f"Selected first-place localization weight: {1.0 - alpha:.2f}",
