@@ -68,6 +68,16 @@ if [ "${SLURM_ARRAY_TASK_ID}" -eq 1 ]; then
     --target "$TIMM_RUNTIME" \
     "timm>=1.0.3,<2"
   export PYTHONPATH="$TIMM_RUNTIME${PYTHONPATH:+:$PYTHONPATH}"
+
+  # Wichita's shared home/output filesystem can reject POSIX file locks used
+  # by the Hugging Face download cache (OSError 37).  Keep the model-download
+  # cache on this compute node's local temporary filesystem instead.
+  LOCAL_JOB_TMP=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
+  export HF_HOME=$LOCAL_JOB_TMP/huggingface
+  export HF_HUB_CACHE=$HF_HOME/hub
+  export HUGGINGFACE_HUB_CACHE=$HF_HUB_CACHE
+  mkdir -p "$HF_HUB_CACHE"
+  echo "Twins Hugging Face cache: $HF_HUB_CACHE"
 fi
 
 echo "===== EARTHQUAKE TURKEY TRANSFORMER MEMBER TRAINING ====="

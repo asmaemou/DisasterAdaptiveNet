@@ -840,13 +840,27 @@ class SwinPretrainedBackbone(nn.Module):
         # safety net for the patch-size divisibility branch (irrelevant for
         # any --img-size / --phase2-crop-size that already passes the
         # divisibility check above, since both are multiples of patch_size).
-        create_kwargs = dict(pretrained=pretrained, features_only=True, output_fmt="NCHW")
-        try:
-            self.model = timm.create_model(variant, img_size=img_size, **create_kwargs)
-        except TypeError:
-            # Some timm versions/variants don't accept img_size/output_fmt for
-            # features_only models.
-            self.model = timm.create_model(variant, **dict(pretrained=pretrained, features_only=True))
+        if variant.startswith("twins_"):
+            # timm 1.x supports multiscale Twins features, but the Twins
+            # constructor does not accept the generic output_fmt keyword.
+            # Its features_only wrapper already returns spatial feature maps.
+            self.model = timm.create_model(
+                variant,
+                img_size=img_size,
+                pretrained=pretrained,
+                features_only=True,
+            )
+        else:
+            create_kwargs = dict(pretrained=pretrained, features_only=True, output_fmt="NCHW")
+            try:
+                self.model = timm.create_model(variant, img_size=img_size, **create_kwargs)
+            except TypeError:
+                # Some timm versions/variants don't accept img_size/output_fmt
+                # for features_only models.
+                self.model = timm.create_model(
+                    variant,
+                    **dict(pretrained=pretrained, features_only=True),
+                )
 
         patched_modules = 0
         for module in self.model.modules():
