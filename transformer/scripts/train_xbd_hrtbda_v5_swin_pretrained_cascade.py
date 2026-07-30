@@ -850,6 +850,14 @@ class SwinPretrainedBackbone(nn.Module):
                 pretrained=pretrained,
                 features_only=True,
             )
+        elif variant.startswith("pvt_v2_"):
+            # PVTv2 is resolution-flexible and does not accept img_size or
+            # output_fmt in the timm constructor used on the HPC environment.
+            self.model = timm.create_model(
+                variant,
+                pretrained=pretrained,
+                features_only=True,
+            )
         else:
             create_kwargs = dict(pretrained=pretrained, features_only=True, output_fmt="NCHW")
             try:

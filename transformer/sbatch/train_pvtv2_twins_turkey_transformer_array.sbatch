@@ -54,6 +54,17 @@ fi
 eval "$("$CONDA_EXE" shell.bash hook)"
 conda activate disasteradaptivenet_cu128
 
+# Wichita's shared home/output filesystem can reject POSIX file locks used by
+# the Hugging Face download cache (OSError 37).  Both new members may need to
+# download ImageNet weights, so give every array task a private node-local
+# cache.  Trained checkpoints are still written to the normal output folder.
+LOCAL_JOB_TMP=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
+export HF_HOME=$LOCAL_JOB_TMP/huggingface
+export HF_HUB_CACHE=$HF_HOME/hub
+export HUGGINGFACE_HUB_CACHE=$HF_HUB_CACHE
+mkdir -p "$HF_HUB_CACHE"
+echo "Hugging Face cache: $HF_HUB_CACHE"
+
 # Older timm releases construct Twins for classification but reject
 # features_only=True.  Install a current timm package into an experiment-local
 # directory for the Twins task only.  This leaves the shared Conda environment
@@ -68,16 +79,6 @@ if [ "${SLURM_ARRAY_TASK_ID}" -eq 1 ]; then
     --target "$TIMM_RUNTIME" \
     "timm>=1.0.3,<2"
   export PYTHONPATH="$TIMM_RUNTIME${PYTHONPATH:+:$PYTHONPATH}"
-
-  # Wichita's shared home/output filesystem can reject POSIX file locks used
-  # by the Hugging Face download cache (OSError 37).  Keep the model-download
-  # cache on this compute node's local temporary filesystem instead.
-  LOCAL_JOB_TMP=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
-  export HF_HOME=$LOCAL_JOB_TMP/huggingface
-  export HF_HUB_CACHE=$HF_HOME/hub
-  export HUGGINGFACE_HUB_CACHE=$HF_HUB_CACHE
-  mkdir -p "$HF_HUB_CACHE"
-  echo "Twins Hugging Face cache: $HF_HUB_CACHE"
 fi
 
 echo "===== EARTHQUAKE TURKEY TRANSFORMER MEMBER TRAINING ====="
