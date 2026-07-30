@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Expose the original first-place xBD checkpoints under inference aliases.
+"""Expose the original released first-place xBD checkpoints for inference.
 
-The locally patched first-place prediction scripts use ``*_tuned_best`` names.
-For this zero-shot branch those names must resolve to the original released xBD
-checkpoints, not to any Turkey-fine-tuned checkpoint.  This script creates a
-small directory of symbolic links so the source files remain unchanged.
+The released winner package calls several final xBD checkpoints
+``*_tuned_best``.  Here, ``tuned`` is part of the authors' original xBD model
+name; it does *not* mean that the checkpoint was fine-tuned on Turkey.  This
+script links those exact released files into an isolated inference directory.
 """
 
 from __future__ import annotations
@@ -19,14 +19,14 @@ def checkpoint_mapping() -> dict[str, str]:
     for seed in range(3):
         mapping.update(
             {
-                f"res50_loc_{seed}_tuned_best": f"res50_loc_{seed}_0_best",
-                f"dpn92_loc_{seed}_tuned_best": f"dpn92_loc_{seed}_0_best",
+                f"res50_loc_{seed}_tuned_best": f"res50_loc_{seed}_tuned_best",
+                f"dpn92_loc_{seed}_tuned_best": f"dpn92_loc_{seed}_tuned_best",
                 f"res34_loc_{seed}_1_best": f"res34_loc_{seed}_1_best",
                 f"se154_loc_{seed}_1_best": f"se154_loc_{seed}_1_best",
-                f"res34_cls2_{seed}_tuned_best": f"res34_cls2_{seed}_0_best",
-                f"res50_cls_cce_{seed}_tuned_best": f"res50_cls_cce_{seed}_0_best",
-                f"dpn92_cls_cce_{seed}_tuned_best": f"dpn92_cls_cce_{seed}_1_best",
-                f"se154_cls_cce_{seed}_tuned_best": f"se154_cls_cce_{seed}_1_best",
+                f"res34_cls2_{seed}_tuned_best": f"res34_cls2_{seed}_tuned_best",
+                f"res50_cls_cce_{seed}_tuned_best": f"res50_cls_cce_{seed}_tuned_best",
+                f"dpn92_cls_cce_{seed}_tuned_best": f"dpn92_cls_cce_{seed}_tuned_best",
+                f"se154_cls_cce_{seed}_tuned_best": f"se154_cls_cce_{seed}_tuned_best",
             }
         )
     return mapping
