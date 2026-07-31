@@ -68,7 +68,11 @@ FINETUNE_LR=5e-5
 BATCH_SIZE=2
 EVAL_BATCH_SIZE=1
 GRAD_ACCUM_STEPS=4
-NUM_WORKERS=8
+# The full xBD train+tier3 loader stalled before its first logged batch when
+# eight forked workers read this dataset from the shared HPC filesystem.
+# Synchronous loading avoids that worker/filesystem deadlock. This changes
+# throughput only; it does not change samples, augmentation, or optimization.
+NUM_WORKERS=0
 
 # Must each be a multiple of 224 (see resolution note above).
 IMG_SIZE=896
@@ -161,6 +165,7 @@ echo "PHASE2_CROP_SIZE: $PHASE2_CROP_SIZE"
 echo "BATCH_SIZE: $BATCH_SIZE"
 echo "GRAD_ACCUM_STEPS: $GRAD_ACCUM_STEPS"
 echo "EFFECTIVE_BATCH_SIZE: $((BATCH_SIZE * GRAD_ACCUM_STEPS))"
+echo "NUM_WORKERS: $NUM_WORKERS (synchronous xBD loading to avoid HPC worker stall)"
 echo "INITIALIZATION: ImageNet only (no Turkey checkpoint and no xView2-winner checkpoint)"
 echo "MODEL CACHE: $LOCAL_JOB_TMP"
 echo "==============================================================="
