@@ -6,7 +6,7 @@
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:1
 #SBATCH --time=72:00:00
-#SBATCH --job-name=hrtbda_v5_swin
+#SBATCH --job-name=xbd_swin_direct
 #SBATCH --output=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.out
 #SBATCH --error=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/transformer/sbatch/logs/%x_%j.err
 
@@ -50,7 +50,7 @@ mkdir -p transformer/sbatch/logs
 # same effective batch size, before reducing IMG_SIZE.
 # ---------------------------------------------------------------------------
 
-EXPERIMENT_NAME=train_plus_tier3_test_xbd_hrtbda_v5_swin_pretrained_cascade
+EXPERIMENT_NAME=SwinImageNet-DirectxBD_TrainTier3
 
 XBD_ROOT=/homes/j244s673/documents/wsu/phd/xview2
 TRAIN_SPLITS=(train tier3)
@@ -124,7 +124,15 @@ fi
 eval "$("$CONDA_EXE" shell.bash hook)"
 conda activate disasteradaptivenet_cu128
 
-echo "===== HRTBDA V5 SWIN-PRETRAINED BACKBONE -- xBD TRAIN JOB ====="
+# Keep model-download locks and temporary files off the shared HPC filesystem.
+LOCAL_JOB_TMP=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
+export HF_HOME=$LOCAL_JOB_TMP/huggingface
+export HF_HUB_CACHE=$HF_HOME/hub
+export HUGGINGFACE_HUB_CACHE=$HF_HUB_CACHE
+export TORCH_HOME=$LOCAL_JOB_TMP/torch
+mkdir -p "$HF_HUB_CACHE" "$TORCH_HOME"
+
+echo "===== IMAGENET-PRETRAINED SWIN-T DIRECT TRAINING ON xBD ====="
 date
 hostname
 pwd
@@ -132,15 +140,10 @@ which python
 python --version
 nvidia-smi || true
 
-echo "===== CHECK / INSTALL timm ====="
-# timm is not in requirements_cu128.txt yet -- install it into this conda env
-# if missing, rather than failing deep inside model construction after the
-# job has already been running. If the compute node has no outbound internet
-# access, pre-install timm from the login node first:
-#   conda activate disasteradaptivenet_cu128 && pip install "timm>=0.9,<2"
+echo "===== CHECK timm ====="
 if ! python -c "import timm" >/dev/null 2>&1; then
-  echo "timm not found in disasteradaptivenet_cu128 -- installing..."
-  pip install --no-input "timm>=0.9,<2"
+  echo "ERROR: timm is missing from disasteradaptivenet_cu128"
+  exit 1
 fi
 python -c "import timm; print('timm version:', timm.__version__)"
 
@@ -158,12 +161,26 @@ echo "PHASE2_CROP_SIZE: $PHASE2_CROP_SIZE"
 echo "BATCH_SIZE: $BATCH_SIZE"
 echo "GRAD_ACCUM_STEPS: $GRAD_ACCUM_STEPS"
 echo "EFFECTIVE_BATCH_SIZE: $((BATCH_SIZE * GRAD_ACCUM_STEPS))"
+echo "INITIALIZATION: ImageNet only (no Turkey checkpoint and no xView2-winner checkpoint)"
+echo "MODEL CACHE: $LOCAL_JOB_TMP"
 echo "==============================================================="
 
-if [ ! -d "$XBD_ROOT" ]; then
-  echo "ERROR: missing xBD root: $XBD_ROOT"
-  exit 1
-fi
+for required in \
+  "$XBD_ROOT/train/images" "$XBD_ROOT/train/targets" \
+  "$XBD_ROOT/tier3/images" "$XBD_ROOT/tier3/targets" \
+  "$XBD_ROOT/hold/images" "$XBD_ROOT/hold/targets" \
+  "$XBD_ROOT/test/images" "$XBD_ROOT/test/targets"
+do
+  if [ ! -d "$required" ]; then
+    echo "ERROR: required xBD dataset directory is missing: $required"
+    exit 1
+  fi
+done
+
+echo "===== CHECK xBD DATASET FORMAT ====="
+python -u transformer/scripts/check_idabd_xbd_format.py \
+  --root "$XBD_ROOT" \
+  --splits train tier3 hold test
 
 CMD=(
   python -u transformer/scripts/train_xbd_hrtbda_v5_swin_pretrained_cascade.py
@@ -218,4 +235,13 @@ echo "==================="
 
 "${CMD[@]}"
 
-echo "Done."
+echo "===== FINAL xBD TEST RESULT ====="
+SUMMARY_FILE=$OUTPUT_DIR/scores/summary_hrtbda_v5_multilabel_crop_cascade.txt
+if [ -f "$SUMMARY_FILE" ]; then
+  cat "$SUMMARY_FILE"
+else
+  echo "WARNING: expected summary was not found: $SUMMARY_FILE"
+  find "$OUTPUT_DIR/scores" -maxdepth 1 -type f -print
+fi
+echo "DONE: ImageNet-pretrained Swin-T trained on xBD train+tier3, validated on hold, tested on test"
+date
