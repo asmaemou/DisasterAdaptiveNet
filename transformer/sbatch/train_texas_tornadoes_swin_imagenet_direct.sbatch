@@ -34,6 +34,20 @@ fi
 eval "$("$CONDA_EXE" shell.bash hook)"
 conda activate disasteradaptivenet_cu128
 
+# Fail immediately if Slurm placed the job on a node where PyTorch cannot use
+# the requested GPU. This check runs inside the allocation, not on a head node.
+python -u -c '
+import sys
+import torch
+
+print("PyTorch:", torch.__version__)
+print("CUDA available:", torch.cuda.is_available())
+if not torch.cuda.is_available():
+    sys.exit("ERROR: CUDA is unavailable on the allocated compute node")
+print("GPU:", torch.cuda.get_device_name(0))
+print("GPU count:", torch.cuda.device_count())
+'
+
 # Keep ImageNet-weight download locks off the shared HPC filesystem.
 LOCAL_JOB_TMP=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
 export HF_HOME=$LOCAL_JOB_TMP/huggingface
@@ -96,7 +110,9 @@ CMD=(
   --batch-size 2
   --eval-batch-size 1
   --grad-accum-steps 4
-  --num-workers 8
+  # Load samples in the training process. Multiprocess workers stalled before
+  # the first batch on the shared HPC filesystem in job 1163214.
+  --num-workers 0
   --img-size 896
   --phase2-crop-size 672
   --crop-candidate-count 8
