@@ -34,6 +34,22 @@ fi
 eval "$("$CONDA_EXE" shell.bash hook)"
 conda activate disasteradaptivenet_cu128
 
+# Keep runtime caches off the NFS-mounted home directory. CUDA otherwise uses
+# ~/.nv/ComputeCache; job 1163216 blocked there in rpc_wait_bit_killable during
+# the first forward pass.
+LOCAL_JOB_TMP=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
+export CUDA_CACHE_PATH=$LOCAL_JOB_TMP/cuda_cache
+export XDG_CACHE_HOME=$LOCAL_JOB_TMP/xdg_cache
+export TORCH_EXTENSIONS_DIR=$LOCAL_JOB_TMP/torch_extensions
+export HF_HOME=$LOCAL_JOB_TMP/huggingface
+export HF_HUB_CACHE=$HF_HOME/hub
+export HUGGINGFACE_HUB_CACHE=$HF_HUB_CACHE
+mkdir -p \
+  "$CUDA_CACHE_PATH" \
+  "$XDG_CACHE_HOME" \
+  "$TORCH_EXTENSIONS_DIR" \
+  "$HF_HUB_CACHE"
+
 # Fail immediately if Slurm placed the job on a node where PyTorch cannot use
 # the requested GPU. This check runs inside the allocation, not on a head node.
 python -u -c '
@@ -47,13 +63,6 @@ if not torch.cuda.is_available():
 print("GPU:", torch.cuda.get_device_name(0))
 print("GPU count:", torch.cuda.device_count())
 '
-
-# Keep ImageNet-weight download locks off the shared HPC filesystem.
-LOCAL_JOB_TMP=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
-export HF_HOME=$LOCAL_JOB_TMP/huggingface
-export HF_HUB_CACHE=$HF_HOME/hub
-export HUGGINGFACE_HUB_CACHE=$HF_HUB_CACHE
-mkdir -p "$HF_HUB_CACHE"
 
 echo "===== SWIN-T DIRECT TRAINING ON TEXAS TORNADOES ====="
 date
