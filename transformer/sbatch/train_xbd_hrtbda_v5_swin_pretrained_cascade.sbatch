@@ -128,13 +128,22 @@ fi
 eval "$("$CONDA_EXE" shell.bash hook)"
 conda activate disasteradaptivenet_cu128
 
-# Keep model-download locks and temporary files off the shared HPC filesystem.
+# Keep all runtime caches off the shared HPC filesystem. In job 1163216,
+# ~/.nv/ComputeCache blocked in rpc_wait_bit_killable during the first forward.
 LOCAL_JOB_TMP=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
+export CUDA_CACHE_PATH=$LOCAL_JOB_TMP/cuda_cache
+export XDG_CACHE_HOME=$LOCAL_JOB_TMP/xdg_cache
+export TORCH_EXTENSIONS_DIR=$LOCAL_JOB_TMP/torch_extensions
 export HF_HOME=$LOCAL_JOB_TMP/huggingface
 export HF_HUB_CACHE=$HF_HOME/hub
 export HUGGINGFACE_HUB_CACHE=$HF_HUB_CACHE
 export TORCH_HOME=$LOCAL_JOB_TMP/torch
-mkdir -p "$HF_HUB_CACHE" "$TORCH_HOME"
+mkdir -p \
+  "$CUDA_CACHE_PATH" \
+  "$XDG_CACHE_HOME" \
+  "$TORCH_EXTENSIONS_DIR" \
+  "$HF_HUB_CACHE" \
+  "$TORCH_HOME"
 
 echo "===== IMAGENET-PRETRAINED SWIN-T DIRECT TRAINING ON xBD ====="
 date

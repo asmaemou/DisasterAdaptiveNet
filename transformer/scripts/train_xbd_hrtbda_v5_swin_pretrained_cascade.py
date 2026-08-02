@@ -1683,6 +1683,40 @@ def load_phase1_backbone_into_phase2(phase2: HRTBDAPhase2, phase1_ckpt: Path, de
     print(f"Missing keys: {len(missing)} | Unexpected keys: {len(unexpected)}", flush=True)
 
 
+def load_complete_phase2_initialization(
+    phase2: HRTBDAPhase2,
+    checkpoint_path: str | Path,
+    device: torch.device,
+) -> None:
+    """Load every Phase-II component from an architecture-compatible checkpoint."""
+    checkpoint_path = Path(checkpoint_path)
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(f"Phase-II initialization checkpoint not found: {checkpoint_path}")
+
+    ckpt = torch.load(checkpoint_path, map_location=device)
+    if not isinstance(ckpt, dict) or "model" not in ckpt:
+        raise RuntimeError(
+            f"Expected a training checkpoint containing a 'model' state dict: {checkpoint_path}"
+        )
+
+    state = ckpt["model"]
+    clean_state = {
+        (key.removeprefix("module.")): value
+        for key, value in state.items()
+    }
+
+    # Strict loading is intentional: this experiment claims to transfer the
+    # complete damage model, so a partial or architecture-mismatched load must
+    # fail instead of silently leaving damage layers randomly initialized.
+    phase2.load_state_dict(clean_state, strict=True)
+    print(f"Loaded complete Phase-II initialization from: {checkpoint_path}", flush=True)
+    print(
+        "Transferred components: Swin backbone, pre/post fusion, decoder, "
+        "four-class damage head, and auxiliary localization head.",
+        flush=True,
+    )
+
+
 # -----------------------------
 # Training
 # -----------------------------
@@ -2093,6 +2127,12 @@ def train_phase2(args: argparse.Namespace, device: torch.device, phase1_ckpt: Op
 
     load_phase1_backbone_into_phase2(model, phase1_ckpt, device)
 
+    if args.init_phase2_from:
+        # This intentionally follows the Phase-I backbone copy: the complete
+        # xBD Phase-II checkpoint replaces all Phase-II weights, including the
+        # backbone, before target-dataset fine-tuning begins.
+        load_complete_phase2_initialization(model, args.init_phase2_from, device)
+
     if torch.cuda.device_count() > 1 and device.type == "cuda":
         model = nn.DataParallel(model)
 
@@ -2424,6 +2464,13 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Optional Phase II checkpoint path for --phase test. Defaults to output-dir/checkpoints/phase2_best.pt.",
     )
+    parser.add_argument(
+        "--init-phase2-from",
+        type=str,
+        default="",
+        help="Complete architecture-compatible Phase-II checkpoint used to initialize "
+        "Phase-II training before target-dataset fine-tuning.",
+    )
 
     parser.add_argument(
         "--phase1-threshold",
@@ -2575,6 +2622,7 @@ def main() -> None:
     print(f"Resume Phase I from: {args.resume_phase1_from if args.resume_phase1_from else 'none'}", flush=True)
     print(f"Existing Phase I checkpoint: {phase1_ckpt}", flush=True)
     print(f"Phase II checkpoint: {phase2_ckpt}", flush=True)
+    print(f"Initialize complete Phase II from: {args.init_phase2_from or 'none'}", flush=True)
     print(f"Device: {device}", flush=True)
     print(f"xBD root: {args.xbd_root}", flush=True)
     print(f"Train split(s): {args.train_split}", flush=True)
