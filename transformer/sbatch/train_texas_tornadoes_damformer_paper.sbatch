@@ -66,15 +66,6 @@ do
   fi
 done
 
-python -u -c '
-import timm
-models = timm.list_models("mit_b2")
-print("timm:", timm.__version__)
-print("MiT-B2 available:", models)
-if "mit_b2" not in models:
-    raise SystemExit("ERROR: installed timm does not provide mit_b2")
-'
-
 python -u transformer/scripts/check_idabd_xbd_format.py \
   --root "$DATA_ROOT" \
   --splits train val test
@@ -83,7 +74,7 @@ echo "===== PAPER-FAITHFUL DAMFORMER ON TEXAS TORNADOES ====="
 date
 hostname
 nvidia-smi || true
-echo "Encoder: weight-shared ImageNet-pretrained MiT-B2, depths [3,4,6,3]"
+echo "Encoder: self-contained weight-shared MiT-B2, depths [3,4,6,3]"
 echo "Fusion: task-specific concat + 3x3 convolution + CBAM channel attention"
 echo "Decoder: dual All-MLP cross-layer fusion with localization feature addition"
 echo "Loss: localization BCE+Dice; damage CE+Lovasz-Softmax"
@@ -113,7 +104,6 @@ CMD=(
   --max-grad-norm 1.0
   --thresholds 0.35 0.45 0.55 0.65 0.75
   --seed 42
-  --imagenet-pretrained
   --amp
 )
 

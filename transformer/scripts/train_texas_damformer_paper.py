@@ -22,6 +22,171 @@ from torch.utils.data import DataLoader
 import train_xbd_hrtbda_v5_swin_pretrained_cascade as legacy
 
 
+class DropPath(nn.Module):
+    def __init__(self, probability: float = 0.0):
+        super().__init__()
+        self.probability = float(probability)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.probability == 0.0 or not self.training:
+            return x
+        keep = 1.0 - self.probability
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        random = keep + torch.rand(shape, dtype=x.dtype, device=x.device)
+        return x * random.floor() / keep
+
+
+class OverlapPatchEmbed(nn.Module):
+    def __init__(self, in_channels: int, channels: int, kernel: int, stride: int):
+        super().__init__()
+        self.projection = nn.Conv2d(
+            in_channels, channels, kernel_size=kernel, stride=stride,
+            padding=kernel // 2,
+        )
+        self.norm = nn.LayerNorm(channels)
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, int, int]:
+        x = self.projection(x)
+        height, width = x.shape[-2:]
+        x = self.norm(x.flatten(2).transpose(1, 2))
+        return x, height, width
+
+
+class EfficientAttention(nn.Module):
+    """MiT spatial-reduction self-attention from SegFormer."""
+
+    def __init__(self, channels: int, heads: int, sr_ratio: int):
+        super().__init__()
+        if channels % heads != 0:
+            raise ValueError("MiT channels must be divisible by attention heads")
+        self.heads = heads
+        self.scale = (channels // heads) ** -0.5
+        self.query = nn.Linear(channels, channels)
+        self.key_value = nn.Linear(channels, channels * 2)
+        self.sr_ratio = sr_ratio
+        if sr_ratio > 1:
+            self.sr = nn.Conv2d(channels, channels, kernel_size=sr_ratio, stride=sr_ratio)
+            self.sr_norm = nn.LayerNorm(channels)
+        self.projection = nn.Linear(channels, channels)
+
+    def forward(self, x: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        batch, tokens, channels = x.shape
+        query = self.query(x).reshape(batch, tokens, self.heads, channels // self.heads).permute(0, 2, 1, 3)
+        reduced = x
+        if self.sr_ratio > 1:
+            reduced = x.transpose(1, 2).reshape(batch, channels, height, width)
+            reduced = self.sr(reduced).reshape(batch, channels, -1).transpose(1, 2)
+            reduced = self.sr_norm(reduced)
+        key_value = self.key_value(reduced).reshape(
+            batch, -1, 2, self.heads, channels // self.heads
+        ).permute(2, 0, 3, 1, 4)
+        key, value = key_value[0], key_value[1]
+        attention = (query @ key.transpose(-2, -1)) * self.scale
+        attention = attention.softmax(dim=-1)
+        output = (attention @ value).transpose(1, 2).reshape(batch, tokens, channels)
+        return self.projection(output)
+
+
+class DepthwiseConv(nn.Module):
+    def __init__(self, channels: int):
+        super().__init__()
+        self.conv = nn.Conv2d(channels, channels, 3, padding=1, groups=channels)
+
+    def forward(self, x: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        batch, _, channels = x.shape
+        x = x.transpose(1, 2).reshape(batch, channels, height, width)
+        return self.conv(x).flatten(2).transpose(1, 2)
+
+
+class MixFFN(nn.Module):
+    def __init__(self, channels: int, expansion: int = 4):
+        super().__init__()
+        hidden = channels * expansion
+        self.fc1 = nn.Linear(channels, hidden)
+        self.depthwise = DepthwiseConv(hidden)
+        self.activation = nn.GELU()
+        self.fc2 = nn.Linear(hidden, channels)
+
+    def forward(self, x: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        x = self.fc1(x)
+        x = self.depthwise(x, height, width)
+        return self.fc2(self.activation(x))
+
+
+class MiTBlock(nn.Module):
+    def __init__(self, channels: int, heads: int, sr_ratio: int, drop_path: float):
+        super().__init__()
+        self.norm1 = nn.LayerNorm(channels)
+        self.attention = EfficientAttention(channels, heads, sr_ratio)
+        self.drop_path = DropPath(drop_path)
+        self.norm2 = nn.LayerNorm(channels)
+        self.ffn = MixFFN(channels)
+
+    def forward(self, x: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        x = x + self.drop_path(self.attention(self.norm1(x), height, width))
+        return x + self.drop_path(self.ffn(self.norm2(x), height, width))
+
+
+class MixTransformerB2(nn.Module):
+    """Self-contained SegFormer MiT-B2 encoder: depths [3,4,6,3]."""
+
+    def __init__(self, drop_path_rate: float = 0.1):
+        super().__init__()
+        channels = [64, 128, 320, 512]
+        depths = [3, 4, 6, 3]
+        heads = [1, 2, 5, 8]
+        sr_ratios = [8, 4, 2, 1]
+        self.channels = channels
+        self.patch_embeddings = nn.ModuleList([
+            OverlapPatchEmbed(3, channels[0], 7, 4),
+            OverlapPatchEmbed(channels[0], channels[1], 3, 2),
+            OverlapPatchEmbed(channels[1], channels[2], 3, 2),
+            OverlapPatchEmbed(channels[2], channels[3], 3, 2),
+        ])
+        rates = torch.linspace(0, drop_path_rate, sum(depths)).tolist()
+        offset = 0
+        self.stages = nn.ModuleList()
+        self.norms = nn.ModuleList()
+        for channels_i, depth, heads_i, sr_ratio in zip(channels, depths, heads, sr_ratios):
+            self.stages.append(nn.ModuleList([
+                MiTBlock(channels_i, heads_i, sr_ratio, rates[offset + index])
+                for index in range(depth)
+            ]))
+            self.norms.append(nn.LayerNorm(channels_i))
+            offset += depth
+        self.apply(self._initialize)
+
+    @staticmethod
+    def _initialize(module: nn.Module) -> None:
+        if isinstance(module, nn.Linear):
+            nn.init.trunc_normal_(module.weight, std=0.02)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Conv2d):
+            fan_out = module.kernel_size[0] * module.kernel_size[1] * module.out_channels
+            fan_out //= module.groups
+            nn.init.normal_(module.weight, mean=0.0, std=math.sqrt(2.0 / fan_out))
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+
+    def forward(self, image: torch.Tensor) -> List[torch.Tensor]:
+        outputs = []
+        x = image
+        for patch, blocks, norm in zip(self.patch_embeddings, self.stages, self.norms):
+            x, height, width = patch(x)
+            for block in blocks:
+                x = block(x, height, width)
+            x = norm(x)
+            batch, _, channels = x.shape
+            feature = x.transpose(1, 2).reshape(batch, channels, height, width)
+            outputs.append(feature)
+            x = feature
+        return outputs
+
+
 class ChannelAttention(nn.Module):
     """CBAM channel attention used by DamFormer's adaptive fusion."""
 
@@ -86,21 +251,10 @@ class AllMLPDecoder(nn.Module):
 class DamFormer(nn.Module):
     """Dual-task Siamese Transformer architecture shown in paper Fig. 1."""
 
-    def __init__(self, decoder_width: int, pretrained: bool):
+    def __init__(self, decoder_width: int):
         super().__init__()
-        try:
-            import timm
-        except ImportError as exc:
-            raise RuntimeError("DamFormer requires timm with the mit_b2 model") from exc
-
-        # MiT-B2 has [3, 4, 6, 3] Transformer units as specified in Sec. 3.1.
-        self.encoder = timm.create_model(
-            "mit_b2", pretrained=pretrained, features_only=True, out_indices=(0, 1, 2, 3)
-        )
-        channels = list(self.encoder.feature_info.channels())
-        expected = [64, 128, 320, 512]
-        if channels != expected:
-            raise RuntimeError(f"Expected MiT-B2 channels {expected}, got {channels}")
+        self.encoder = MixTransformerB2()
+        channels = self.encoder.channels
 
         # Separate attention modules yield task-specific localization and
         # classification features, as described at the end of Sec. 2.1.
@@ -270,7 +424,7 @@ def save_checkpoint(path: Path, model: nn.Module, optimizer, epoch: int, result:
 
 def train(args: argparse.Namespace, device: torch.device) -> Path:
     train_loader, val_loader, _ = make_loaders(args)
-    model = DamFormer(args.decoder_width, args.imagenet_pretrained).to(device)
+    model = DamFormer(args.decoder_width).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler("cuda", enabled=args.amp and device.type == "cuda")
     output = Path(args.output_dir)
@@ -328,7 +482,7 @@ def train(args: argparse.Namespace, device: torch.device) -> Path:
 
 def test(args: argparse.Namespace, device: torch.device, checkpoint: Path) -> Dict[str, float]:
     _, _, test_loader = make_loaders(args)
-    model = DamFormer(args.decoder_width, pretrained=False).to(device)
+    model = DamFormer(args.decoder_width).to(device)
     saved = torch.load(checkpoint, map_location=device, weights_only=False)
     model.load_state_dict(saved["model"], strict=True)
     threshold = float(saved["best_results"]["localization_threshold"])
@@ -365,7 +519,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--thresholds", type=float, nargs="+", default=[0.35, 0.45, 0.55, 0.65, 0.75])
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--imagenet-pretrained", action="store_true")
     parser.add_argument("--amp", action="store_true")
     return parser.parse_args()
 
@@ -379,7 +532,7 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(
         f"Device: {device} | Architecture: paper-faithful DamFormer (Siamese MiT-B2) | "
-        f"ImageNet pretrained: {args.imagenet_pretrained} | Data: {args.data_root}", flush=True,
+        f"Encoder initialization: SegFormer MiT initialization | Data: {args.data_root}", flush=True,
     )
     checkpoint = Path(args.checkpoint) if args.checkpoint else output / "checkpoints" / "best.pt"
     if args.phase in {"train", "train_test"}:
