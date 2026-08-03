@@ -15,7 +15,7 @@ export PYTHONUNBUFFERED=1
 
 PROJECT_ROOT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
 DATA_ROOT=/homes/j244s673/documents/wsu/phd/texas_tornadoes_preprocessed
-OUTPUT_DIR=$PROJECT_ROOT/output/SwinDamageFormer_TEXAS_TORNADOES
+OUTPUT_DIR=$PROJECT_ROOT/output/SwinDamageFormerV2_TEXAS_TORNADOES
 
 cd "$PROJECT_ROOT"
 mkdir -p transformer/sbatch/logs "$OUTPUT_DIR/checkpoints" "$OUTPUT_DIR/scores"

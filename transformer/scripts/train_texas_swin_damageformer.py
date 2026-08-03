@@ -231,6 +231,13 @@ def damage_target(target5: torch.Tensor) -> torch.Tensor:
     return target
 
 
+def safe_cross_entropy(logits: torch.Tensor, target: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
+    """Cross entropy that returns a differentiable zero for all-ignore crops."""
+    if not (target != 255).any():
+        return logits.sum() * 0.0
+    return F.cross_entropy(logits, target, weight=weights, ignore_index=255)
+
+
 def soft_dice_loss(logits: torch.Tensor, target: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
     valid = target != 255
     safe = target.masked_fill(~valid, 0)
@@ -255,7 +262,7 @@ def ordinal_loss(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
 
 def instance_consistency_loss(logits: torch.Tensor, target5: torch.Tensor, min_pixels: int = 8) -> torch.Tensor:
     """Classify connected ground-truth damage regions from their mean pixel probability."""
-    probs = torch.softmax(logits, dim=1)
+    probs = torch.softmax(logits.float(), dim=1)
     losses: List[torch.Tensor] = []
     for bi in range(target5.shape[0]):
         target_np = target5[bi].detach().cpu().numpy().astype(np.uint8)
@@ -323,7 +330,7 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device, thresho
         pre = batch["pre"].to(device)
         post = batch["post"].to(device)
         out = model(pre, post)
-        cached.append((torch.sigmoid(out["loc"]).cpu(), torch.softmax(out["damage"], 1).cpu(), batch["loc"].long(), batch["target5"].long()))
+        cached.append((torch.sigmoid(out["loc"].float()).cpu(), torch.softmax(out["damage"].float(), 1).cpu(), batch["loc"].long(), batch["target5"].long()))
     best = None
     for threshold in thresholds:
         counts = {"loc_tp": 0, "loc_fp": 0, "loc_fn": 0, **{c: {"tp": 0, "fp": 0, "fn": 0} for c in range(1, 5)}}
@@ -390,12 +397,28 @@ def train(args: argparse.Namespace, device: torch.device) -> Path:
             target = damage_target(target5)
             with torch.amp.autocast("cuda", enabled=args.amp and device.type == "cuda"):
                 out = model(pre, post)
-                loc_loss, _, _ = loc_criterion(out["loc"], loc)
-                ce = F.cross_entropy(out["damage"], target, weight=cls_weight, ignore_index=255)
-                dice = soft_dice_loss(out["damage"], target, cls_weight)
-                ordinal = ordinal_loss(out["ordinal"], target)
-                instance = instance_consistency_loss(out["damage"], target5, args.min_instance_pixels)
+            # Keep the memory-heavy forward pass in AMP, but calculate losses
+            # in float32. This avoids underflow in rare-class probabilities.
+            loc_logits = out["loc"].float()
+            damage_logits = out["damage"].float()
+            ordinal_logits = out["ordinal"].float()
+            loc_loss, _, _ = loc_criterion(loc_logits, loc.float())
+            ce = safe_cross_entropy(damage_logits, target, cls_weight)
+            dice = soft_dice_loss(damage_logits, target, cls_weight)
+            ordinal = ordinal_loss(ordinal_logits, target)
+            instance = instance_consistency_loss(damage_logits, target5, args.min_instance_pixels)
+            with torch.amp.autocast("cuda", enabled=False):
                 loss = loc_loss + ce + 0.5 * dice + args.ordinal_weight * ordinal + args.instance_weight * instance
+            components = {
+                "total": loss, "localization": loc_loss, "cross_entropy": ce,
+                "dice": dice, "ordinal": ordinal, "instance": instance,
+            }
+            bad = {name: float(value.detach().item()) for name, value in components.items() if not torch.isfinite(value).all()}
+            if bad:
+                valid_pixels = int((target != 255).sum().item())
+                raise FloatingPointError(
+                    f"Non-finite loss at epoch={epoch}, step={step}, valid_damage_pixels={valid_pixels}: {bad}"
+                )
             scaler.scale(loss / args.grad_accum_steps).backward()
             should_step = step % args.grad_accum_steps == 0 or step == len(train_loader)
             if should_step:
