@@ -19,7 +19,8 @@ if ! command -v apptainer >/dev/null 2>&1; then
   exit 1
 fi
 echo "Building the official legacy xView2 v1.0 runtime: $IMAGE"
-if ! apptainer build --fakeroot --force "$IMAGE" transformer/containers/xview2_baseline.def; then
+if ! apptainer build --fakeroot --ignore-fakeroot-command --force \
+  "$IMAGE" transformer/containers/xview2_baseline.def; then
   echo "ERROR: container build failed. If fakeroot is disabled, ask HPC support to build this definition file once."
   exit 1
 fi
