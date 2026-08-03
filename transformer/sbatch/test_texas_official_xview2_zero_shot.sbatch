@@ -14,12 +14,17 @@ set -euo pipefail
 export PYTHONUNBUFFERED=1
 PROJECT_ROOT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
 DATA_ROOT=/homes/j244s673/documents/wsu/phd/texas_tornadoes_preprocessed
-IMAGE=$PROJECT_ROOT/containers/xview2_baseline_v1.0.sif
+ENV_DIR=$PROJECT_ROOT/.conda/xview2_baseline_py37
+OFFICIAL=$PROJECT_ROOT/third_party/xview2_baseline
 OUTPUT=$PROJECT_ROOT/output/OfficialxView2-ZeroShotTexas
 cd "$PROJECT_ROOT"
 mkdir -p transformer/sbatch/logs "$OUTPUT/predictions" "$OUTPUT/scores"
-test -s "$IMAGE" || { echo "ERROR: run setup_official_xview2_baseline_container.sbatch first"; exit 1; }
-command -v apptainer >/dev/null || { echo "ERROR: apptainer unavailable"; exit 1; }
+test -x "$ENV_DIR/bin/python" || { echo "ERROR: run setup_official_xview2_baseline_container.sbatch first"; exit 1; }
+test -s "$OFFICIAL/weights/localization.h5" || { echo "ERROR: official localization weights missing"; exit 1; }
+test -s "$OFFICIAL/weights/classification.hdf5" || { echo "ERROR: official classification weights missing"; exit 1; }
+export PATH=$ENV_DIR/bin:$PATH
+export PYTHONPATH=$OFFICIAL:$OFFICIAL/model:$OFFICIAL/spacenet/src
+export CUDA_VISIBLE_DEVICES=""
 
 echo "STRICT ZERO-SHOT: released xBD weights; Texas test images only"
 for pre_host in "$DATA_ROOT"/test/images/*_pre_disaster.*; do
@@ -29,14 +34,14 @@ for pre_host in "$DATA_ROOT"/test/images/*_pre_disaster.*; do
   post_host=$DATA_ROOT/test/images/${stem}_post_disaster.$ext
   test -f "$post_host" || { echo "ERROR: missing post image for $stem"; exit 1; }
   echo "Inference: $stem"
-  apptainer run --nv \
-    --bind "$DATA_ROOT/test/images:/submission:ro" \
-    --bind "$OUTPUT/predictions:/output" \
-    "$IMAGE" \
-    "/submission/${stem}_pre_disaster.$ext" \
-    "/submission/${stem}_post_disaster.$ext" \
-    "/output/${stem}_localization.png" \
-    "/output/${stem}_damage.png"
+  "$OFFICIAL/utils/inference.sh" \
+    -x "$OFFICIAL" \
+    -i "$pre_host" \
+    -p "$post_host" \
+    -l "$OFFICIAL/weights/localization.h5" \
+    -c "$OFFICIAL/weights/classification.hdf5" \
+    -o "$OUTPUT/predictions/${stem}_damage.png" \
+    -y
 done
 
 python -u transformer/scripts/score_official_xview2_texas.py \
