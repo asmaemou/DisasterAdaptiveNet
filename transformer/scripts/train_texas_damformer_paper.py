@@ -314,7 +314,10 @@ def lovasz_grad(gt_sorted: torch.Tensor) -> torch.Tensor:
     union = total_positive + (1.0 - gt_sorted).float().cumsum(0)
     jaccard = 1.0 - intersection / union.clamp_min(1e-7)
     if pixels > 1:
-        jaccard[1:pixels] -= jaccard[:-1]
+        # Do not update overlapping slices in place. PyTorch 2.11 rejects
+        # that older Lovasz implementation pattern because the right-hand
+        # slice aliases the tensor being written.
+        jaccard = torch.cat((jaccard[:1], jaccard[1:] - jaccard[:-1]))
     return jaccard
 
 
