@@ -33,7 +33,7 @@ fi
 "$ENV_DIR/bin/pip" install --no-cache-dir \
   numpy==1.18.5 scipy==1.4.1 h5py==2.10.0 pandas==1.0.5 \
   scikit-learn==0.23.2 pillow==7.2.0 \
-  tensorflow==1.15.5 keras==2.2.4 chainer==7.8.1 \
+  tensorflow==1.15.5 keras==2.2.4 chainer==7.8.1 protobuf==3.20.3 \
   matplotlib==3.2.2 tqdm scikit-image==0.16.2 \
   opencv-python-headless==4.2.0.34 imgaug==0.4.0 \
   shapely==1.7.1 geopandas==0.8.1 imantics \
