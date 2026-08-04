@@ -14,7 +14,7 @@ set -euo pipefail
 export PYTHONUNBUFFERED=1
 PROJECT_ROOT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
 DATA_ROOT=/homes/j244s673/documents/wsu/phd/texas_tornadoes_preprocessed
-ENV_DIR=$PROJECT_ROOT/.conda/xview2_baseline_py37
+ENV_DIR=$PROJECT_ROOT/.conda/xview2_baseline_py37_v2
 OFFICIAL=$PROJECT_ROOT/third_party/xview2_baseline
 OUTPUT=$PROJECT_ROOT/output/OfficialxView2-ZeroShotTexas
 cd "$PROJECT_ROOT"

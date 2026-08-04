@@ -11,30 +11,23 @@
 
 set -euo pipefail
 PROJECT_ROOT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
-ENV_DIR=$PROJECT_ROOT/.conda/xview2_baseline_py37
+ENV_DIR=$PROJECT_ROOT/.conda/xview2_baseline_py37_v2
 OFFICIAL=$PROJECT_ROOT/third_party/xview2_baseline
 cd "$PROJECT_ROOT"
 mkdir -p transformer/sbatch/logs .conda third_party
 
-if [ -x "$HOME/miniforge3/bin/conda" ]; then
-  CONDA_EXE="$HOME/miniforge3/bin/conda"
-elif [ -x "$HOME/miniforge/bin/conda" ]; then
-  CONDA_EXE="$HOME/miniforge/bin/conda"
-elif command -v conda >/dev/null 2>&1; then
-  CONDA_EXE="$(command -v conda)"
-else
-  echo "ERROR: conda not found"
-  exit 1
-fi
-
 echo "Creating rootless official xView2 environment: $ENV_DIR"
 if [ ! -x "$ENV_DIR/bin/python" ]; then
-  # Resolve only Python and pip with Conda. Asking Conda to solve the complete
-  # 2019 scientific stack against today's conda-forge metadata exceeded the
-  # setup job's time limit. The pinned Linux wheels are installed below.
-  "$CONDA_EXE" create -y -p "$ENV_DIR" \
-    --override-channels -c defaults \
-    python=3.7 pip=21.3.1
+  # Use a fixed Python 3.7 Miniconda distribution. This bypasses Conda's
+  # repodata solver, which repeatedly stalled for hours on the HPC filesystem.
+  LOCAL_JOB_TMP=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
+  INSTALLER=$LOCAL_JOB_TMP/miniconda_py37.sh
+  mkdir -p "$LOCAL_JOB_TMP"
+  curl -fL --retry 3 \
+    https://repo.anaconda.com/miniconda/Miniconda3-py37_23.1.0-1-Linux-x86_64.sh \
+    -o "$INSTALLER"
+  bash "$INSTALLER" -b -p "$ENV_DIR"
+  "$ENV_DIR/bin/python" -m pip install --no-cache-dir --upgrade pip==21.3.1
 fi
 
 "$ENV_DIR/bin/pip" install --no-cache-dir \
