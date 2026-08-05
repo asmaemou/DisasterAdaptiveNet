@@ -26,6 +26,9 @@ test -s "$OFFICIAL/weights/classification.hdf5" || { echo "ERROR: official class
 export PATH=$ENV_DIR/bin:$PATH
 export PYTHONPATH=$OFFICIAL:$OFFICIAL/model:$OFFICIAL/spacenet/src
 export CUDA_VISIBLE_DEVICES=""
+# HDF5 advisory locks are unsupported on the shared HPC filesystem. The
+# released checkpoints are opened read-only, so disabling locking is safe.
+export HDF5_USE_FILE_LOCKING=FALSE
 
 echo "STRICT ZERO-SHOT: released xBD weights; Texas test images only"
 for pre_host in "$DATA_ROOT"/test/images/*_pre_disaster.*; do

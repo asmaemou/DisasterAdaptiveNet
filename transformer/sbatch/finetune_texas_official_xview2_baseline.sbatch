@@ -29,6 +29,7 @@ export PYTHONPATH=$OFFICIAL:$OFFICIAL/model:$OFFICIAL/spacenet/src
 # The released 2019 TensorFlow/Chainer runtime cannot execute on a Blackwell
 # GPU. Run the official code on CPU rather than changing framework or weights.
 export CUDA_VISIBLE_DEVICES=""
+export HDF5_USE_FILE_LOCKING=FALSE
 
 python -u transformer/scripts/check_idabd_xbd_format.py --root "$DATA_ROOT" --splits train val test
 python -u transformer/scripts/prepare_texas_for_official_xview2.py \
