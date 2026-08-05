@@ -35,6 +35,17 @@ mkdir -p transformer/sbatch/logs "$FIRST_RAW" "$SWIN_RAW" "$RESULTS"
 source "$HOME/miniforge3/etc/profile.d/conda.sh"
 conda activate disasteradaptivenet_cu128
 
+# Keep CUDA/PyTorch caches off the shared home filesystem. The legacy
+# first-place predictors compile/load kernels during their first forward pass;
+# using ~/.nv on NFS can leave the process blocked in rpc_wait_bit_killable.
+LOCAL_JOB_TMP=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
+export CUDA_CACHE_PATH=$LOCAL_JOB_TMP/cuda_cache
+export XDG_CACHE_HOME=$LOCAL_JOB_TMP/xdg_cache
+export TORCH_EXTENSIONS_DIR=$LOCAL_JOB_TMP/torch_extensions
+export TORCH_HOME=$LOCAL_JOB_TMP/torch
+export HF_HOME=$LOCAL_JOB_TMP/huggingface
+mkdir -p "$CUDA_CACHE_PATH" "$XDG_CACHE_HOME" "$TORCH_EXTENSIONS_DIR" "$TORCH_HOME" "$HF_HOME"
+
 for required in \
   "$FIRST_DATA/val/images" "$FIRST_DATA/test/images" "$FIRST_DATA/official_split_manifest.csv" \
   "$FIRST_WEIGHTS" \
