@@ -373,6 +373,20 @@ def print_result(label: str, result: Dict[str, float]) -> None:
 def train(args: argparse.Namespace, device: torch.device) -> Path:
     train_loader, val_loader, _, train_ds = make_loaders(args)
     model = SwinDamageFormer(args).to(device)
+    if args.init_checkpoint:
+        initialization = torch.load(args.init_checkpoint, map_location=device, weights_only=False)
+        state = initialization.get("model", initialization)
+        incompatible = model.load_state_dict(state, strict=False)
+        if incompatible.missing_keys or incompatible.unexpected_keys:
+            raise RuntimeError(
+                "Initialization checkpoint is not architecture-compatible: "
+                f"missing={incompatible.missing_keys}, unexpected={incompatible.unexpected_keys}"
+            )
+        print(
+            f"Initialized the complete SwinDamageFormer from {args.init_checkpoint} "
+            f"(stored epoch={initialization.get('epoch', 'unknown')}).",
+            flush=True,
+        )
     model.set_backbone_trainable(False)
     optimizer = make_optimizer(model, args)
     loc_weight = legacy.make_loc_pos_weight(train_ds).to(device)
@@ -475,6 +489,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--test-split", default="test")
     p.add_argument("--output-dir", required=True)
     p.add_argument("--checkpoint", default="")
+    p.add_argument(
+        "--init-checkpoint", default="",
+        help="Initialize every model weight from a compatible SwinDamageFormer checkpoint before training.",
+    )
     p.add_argument("--epochs", type=int, default=80)
     p.add_argument("--patience", type=int, default=15)
     p.add_argument("--freeze-backbone-epochs", type=int, default=8)
