@@ -19,7 +19,7 @@ OFFICIAL=$PROJECT_ROOT/third_party/xview2_baseline
 OUTPUT=$PROJECT_ROOT/output/OfficialxView2-ZeroShotTexas
 cd "$PROJECT_ROOT"
 mkdir -p transformer/sbatch/logs "$OUTPUT/predictions" "$OUTPUT/scores"
-mkdir -p "$OUTPUT/internal_logs"
+mkdir -p "$OUTPUT/work"
 test -x "$ENV_DIR/bin/python" || { echo "ERROR: run setup_official_xview2_baseline_container.sbatch first"; exit 1; }
 test -s "$OFFICIAL/weights/localization.h5" || { echo "ERROR: official localization weights missing"; exit 1; }
 test -s "$OFFICIAL/weights/classification.hdf5" || { echo "ERROR: official classification weights missing"; exit 1; }
@@ -35,33 +35,12 @@ for pre_host in "$DATA_ROOT"/test/images/*_pre_disaster.*; do
   post_host=$DATA_ROOT/test/images/${stem}_post_disaster.$ext
   test -f "$post_host" || { echo "ERROR: missing post image for $stem"; exit 1; }
   echo "Inference: $stem"
-  : > /tmp/inference_log
-  set +e
-  "$OFFICIAL/utils/inference.sh" \
-    -x "$OFFICIAL" \
-    -i "$pre_host" \
-    -p "$post_host" \
-    -l "$OFFICIAL/weights/localization.h5" \
-    -c "$OFFICIAL/weights/classification.hdf5" \
-    -o "$OUTPUT/predictions/${stem}_damage.png" \
-    -y
-  inference_status=$?
-  set -e
-  if [ -f /tmp/inference_log ]; then
-    cp /tmp/inference_log "$OUTPUT/internal_logs/${stem}.log"
-  fi
-  if [ "$inference_status" -ne 0 ]; then
-    echo "ERROR: official inference failed for $stem with exit code $inference_status"
-    echo "===== OFFICIAL INTERNAL LOG ====="
-    cat /tmp/inference_log || true
-    echo "================================="
-    exit "$inference_status"
-  fi
-  test -s "$OUTPUT/predictions/${stem}_damage.png" || {
-    echo "ERROR: inference returned success but produced no damage raster for $stem"
-    cat /tmp/inference_log || true
-    exit 1
-  }
+  bash transformer/scripts/run_official_xview2_inference.sh \
+    "$OFFICIAL" "$pre_host" "$post_host" \
+    "$OFFICIAL/weights/localization.h5" \
+    "$OFFICIAL/weights/classification.hdf5" \
+    "$OUTPUT/predictions/${stem}_damage.png" \
+    "$OUTPUT/work"
 done
 
 python -u transformer/scripts/score_official_xview2_texas.py \
