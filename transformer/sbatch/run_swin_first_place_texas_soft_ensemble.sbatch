@@ -84,10 +84,16 @@ trap restore_test_link EXIT
 generate_first_place_probabilities() {
   local split=$1
   local destination=$FIRST_RAW/$split
-  if [ -f "$destination/_SUCCESS" ]; then
+  if python -u "$PROJECT_ROOT/transformer/scripts/validate_first_place_probability_cache.py" \
+      --root "$destination" \
+      --manifest "$FIRST_DATA/official_split_manifest.csv" \
+      --split "$split" \
+      --require-success-marker
+  then
     echo "Reusing first-place probabilities: $destination"
     return
   fi
+  echo "First-place cache is absent or incomplete; regenerating split=$split"
   cleanup_prediction_dirs
   rm -rf test
   ln -sfn "$FIRST_DATA/$split" test
@@ -101,6 +107,16 @@ generate_first_place_probabilities() {
     mv "$directory" "$destination/$directory"
   done
   touch "$destination/_SUCCESS"
+  if ! python -u "$PROJECT_ROOT/transformer/scripts/validate_first_place_probability_cache.py" \
+      --root "$destination" \
+      --manifest "$FIRST_DATA/official_split_manifest.csv" \
+      --split "$split" \
+      --require-success-marker
+  then
+    rm -f "$destination/_SUCCESS"
+    echo "ERROR: generated first-place cache failed integrity validation: $destination"
+    exit 1
+  fi
   rm -rf submission
 }
 
