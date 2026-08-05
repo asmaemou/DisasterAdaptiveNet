@@ -113,6 +113,24 @@ def patch_file(path):
         "models_folder = __import__('os').environ.get('MODELS_FOLDER', 'weights')",
     )
 
+    # Inference immediately loads a complete fine-tuned checkpoint, so an
+    # additional ImageNet download is unnecessary. Several legacy backbone
+    # URLs now have expired certificates; disabling constructor pretraining
+    # also makes inference reproducible on offline compute nodes.
+    if path.name.startswith("predict"):
+        inference_constructors = {
+            "Res34_Unet_Loc()": "Res34_Unet_Loc(pretrained=False)",
+            "Res34_Unet_Double()": "Res34_Unet_Double(pretrained=False)",
+            "SeResNext50_Unet_Loc()": "SeResNext50_Unet_Loc(pretrained=None)",
+            "SeResNext50_Unet_Double()": "SeResNext50_Unet_Double(pretrained=None)",
+            "Dpn92_Unet_Loc()": "Dpn92_Unet_Loc(pretrained=None)",
+            "Dpn92_Unet_Double()": "Dpn92_Unet_Double(pretrained=None)",
+            "SeNet154_Unet_Loc()": "SeNet154_Unet_Loc(pretrained=None)",
+            "SeNet154_Unet_Double()": "SeNet154_Unet_Double(pretrained=None)",
+        }
+        for original, replacement in inference_constructors.items():
+            s = s.replace(original, replacement)
+
     s = re.sub(
         r"torch\.load\((path\.join\(models_folder,\s*snap_to_load\)),\s*map_location='cpu'\)",
         r"torch.load(\1, map_location='cpu', weights_only=False)",

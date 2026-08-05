@@ -91,7 +91,9 @@ generate_first_place_probabilities() {
   cleanup_prediction_dirs
   rm -rf test
   ln -sfn "$FIRST_DATA/$split" test
-  bash predict.sh
+  # -e prevents the legacy driver from silently continuing after a failed
+  # model family and producing an incomplete ensemble.
+  bash -e predict.sh
   rm -rf "$destination"
   mkdir -p "$destination"
   for directory in "${PREDICTION_DIRS[@]}"; do
