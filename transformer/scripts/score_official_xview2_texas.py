@@ -32,7 +32,9 @@ def main() -> None:
     if not files:
         raise RuntimeError(f"No *_damage.png predictions found in {predictions}")
     for prediction_path in files:
-        stem = prediction_path.name.removesuffix("_damage.png")
+        # The official xView2 runtime uses Python 3.7; str.removesuffix was
+        # introduced in Python 3.9.
+        stem = prediction_path.name[:-len("_damage.png")]
         loc_path = targets / f"{stem}_pre_disaster_target.png"
         damage_path = targets / f"{stem}_post_disaster_target.png"
         if not (loc_path.exists() and damage_path.exists()):
