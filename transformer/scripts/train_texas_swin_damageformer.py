@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 import sys
@@ -14,7 +15,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 
 import train_xbd_hrtbda_v5_swin_pretrained_cascade as legacy
 
@@ -199,6 +200,39 @@ class SwinDamageFormer(nn.Module):
         return {"loc": loc_logits, "damage": damage, "ordinal": ordinal}
 
 
+def rare_tile_sample_weights(dataset: legacy.XBDHRTBDADataset, args: argparse.Namespace) -> torch.Tensor:
+    """Oversample tiles containing rare damage without changing test/val distributions."""
+    weights = []
+    tile_counts = {"minor": 0, "major": 0, "destroyed": 0}
+    for sample in dataset.samples:
+        localization = dataset._read_mask(sample.pre_target_path)
+        damage = dataset._read_mask(sample.post_target_path)
+        target = dataset._target5_from_masks(localization, damage)
+        has_minor = bool((target == 2).any())
+        has_major = bool((target == 3).any())
+        has_destroyed = bool((target == 4).any())
+        tile_counts["minor"] += int(has_minor)
+        tile_counts["major"] += int(has_major)
+        tile_counts["destroyed"] += int(has_destroyed)
+        # Add rather than multiply so a tile containing several rare classes
+        # remains important without receiving an extreme sampling probability.
+        weight = (
+            1.0
+            + args.minor_tile_weight * has_minor
+            + args.major_tile_weight * has_major
+            + args.destroyed_tile_weight * has_destroyed
+        )
+        weights.append(weight)
+    result = torch.tensor(weights, dtype=torch.double)
+    result /= result.mean().clamp_min(1e-12)
+    print(f"Rare-damage tile counts: {tile_counts}", flush=True)
+    print(
+        f"Tile sampling weights: min={result.min():.3f}, mean={result.mean():.3f}, "
+        f"max={result.max():.3f}", flush=True,
+    )
+    return result
+
+
 def make_loaders(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader, DataLoader, legacy.XBDHRTBDADataset]:
     train_ds = legacy.XBDHRTBDADataset(
         args.data_root, args.train_split, args.img_size, training=True,
@@ -209,7 +243,17 @@ def make_loaders(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader, Data
     val_ds = legacy.XBDHRTBDADataset(args.data_root, args.val_split, args.img_size, training=False)
     test_ds = legacy.XBDHRTBDADataset(args.data_root, args.test_split, args.img_size, training=False)
     common = dict(num_workers=args.num_workers, pin_memory=False)
-    train = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, drop_last=True, **common)
+    sampler = None
+    if args.rare_tile_sampling:
+        sampler = WeightedRandomSampler(
+            rare_tile_sample_weights(train_ds, args),
+            num_samples=len(train_ds), replacement=True,
+            generator=torch.Generator().manual_seed(args.seed),
+        )
+    train = DataLoader(
+        train_ds, batch_size=args.batch_size, sampler=sampler,
+        shuffle=sampler is None, drop_last=True, **common,
+    )
     val = DataLoader(val_ds, batch_size=args.eval_batch_size, shuffle=False, drop_last=False, **common)
     test = DataLoader(test_ds, batch_size=args.eval_batch_size, shuffle=False, drop_last=False, **common)
     return train, val, test, train_ds
@@ -236,6 +280,52 @@ def safe_cross_entropy(logits: torch.Tensor, target: torch.Tensor, weights: torc
     if not (target != 255).any():
         return logits.sum() * 0.0
     return F.cross_entropy(logits, target, weight=weights, ignore_index=255)
+
+
+def class_balanced_focal_loss(
+    logits: torch.Tensor,
+    target: torch.Tensor,
+    weights: torch.Tensor,
+    gamma: float,
+    label_smoothing: float,
+) -> torch.Tensor:
+    """Foreground-only focal CE with weights applied after focal modulation.
+
+    Computing pt from unweighted log-probability avoids class weights changing
+    the focal difficulty term, a common implementation error.
+    """
+    valid = target != 255
+    if not valid.any():
+        return logits.sum() * 0.0
+    logits_valid = logits.permute(0, 2, 3, 1)[valid]
+    target_valid = target[valid]
+    log_probability = F.log_softmax(logits_valid.float(), dim=1)
+    nll = F.nll_loss(log_probability, target_valid, reduction="none")
+    smooth = -log_probability.mean(dim=1)
+    ce = (1.0 - label_smoothing) * nll + label_smoothing * smooth
+    pt = torch.exp(-nll).clamp(1e-7, 1.0)
+    focal = (1.0 - pt).pow(gamma)
+    class_weight = weights[target_valid]
+    return (focal * ce * class_weight).sum() / class_weight.sum().clamp_min(1e-7)
+
+
+class ModelEMA:
+    """Exponential moving average used for stable validation and checkpoints."""
+    def __init__(self, model: nn.Module, decay: float):
+        self.module = copy.deepcopy(model).eval()
+        self.decay = float(decay)
+        for parameter in self.module.parameters():
+            parameter.requires_grad_(False)
+
+    @torch.no_grad()
+    def update(self, model: nn.Module) -> None:
+        source = model.state_dict()
+        for name, value in self.module.state_dict().items():
+            current = source[name].detach()
+            if value.is_floating_point():
+                value.mul_(self.decay).add_(current, alpha=1.0 - self.decay)
+            else:
+                value.copy_(current)
 
 
 def soft_dice_loss(logits: torch.Tensor, target: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
@@ -310,39 +400,137 @@ def finalize_counts(counts: Dict, threshold: float) -> Dict[str, float]:
     loc = legacy.F1Recorder(counts["loc_tp"], counts["loc_fp"], counts["loc_fn"])
     rec = [legacy.F1Recorder(counts[c]["tp"], counts[c]["fp"], counts[c]["fn"]) for c in range(1, 5)]
     damage = legacy.harmonic_mean([x.f1 for x in rec])
+    macro = float(np.mean([x.f1 for x in rec]))
     return {
         "score": 0.3 * loc.f1 + 0.7 * damage,
         "localization_f1": loc.f1,
         "damage_f1": damage,
+        "damage_macro_f1": macro,
+        "macro_composite_score": 0.3 * loc.f1 + 0.7 * macro,
         "damage_f1_no_damage": rec[0].f1,
         "damage_f1_minor_damage": rec[1].f1,
         "damage_f1_major_damage": rec[2].f1,
         "damage_f1_destroyed": rec[3].f1,
+        "predicted_damage_pixels": {
+            str(class_id): int(counts[class_id]["tp"] + counts[class_id]["fp"])
+            for class_id in range(1, 5)
+        },
+        "true_damage_pixels": {
+            str(class_id): int(counts[class_id]["tp"] + counts[class_id]["fn"])
+            for class_id in range(1, 5)
+        },
         "localization_threshold": threshold,
     }
 
 
+def ordinal_distribution(logits: torch.Tensor) -> torch.Tensor:
+    """Convert three cumulative ordinal logits into four class probabilities."""
+    cumulative = torch.sigmoid(logits.float())
+    q1 = cumulative[:, 0]
+    q2 = torch.minimum(q1, cumulative[:, 1])
+    q3 = torch.minimum(q2, cumulative[:, 2])
+    probability = torch.stack((1.0 - q1, q1 - q2, q2 - q3, q3), dim=1)
+    probability = probability.clamp_min(1e-7)
+    return probability / probability.sum(dim=1, keepdim=True).clamp_min(1e-7)
+
+
+INFERENCE_CLASS_BOOSTS = (
+    (1.0, 1.0, 1.0, 1.0),
+    (1.0, 1.25, 1.25, 1.0),
+    (1.0, 1.5, 1.25, 1.0),
+    (1.0, 1.25, 1.5, 1.0),
+    (1.0, 1.5, 1.5, 1.1),
+)
+
+
+def inference_config_from_result(result: Dict) -> Dict:
+    return {
+        "localization_threshold": float(result.get("localization_threshold", 0.5)),
+        "ordinal_blend": float(result.get("ordinal_blend", 0.0)),
+        "object_vote": bool(result.get("object_vote", True)),
+        "class_boosts": tuple(float(value) for value in result.get("class_boosts", (1, 1, 1, 1))),
+    }
+
+
 @torch.no_grad()
-def evaluate(model: nn.Module, loader: DataLoader, device: torch.device, thresholds: List[float], min_pixels: int) -> Dict[str, float]:
+def evaluate(
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+    thresholds: List[float],
+    min_pixels: int,
+    fixed_config: Dict | None = None,
+) -> Dict[str, float]:
     model.eval()
     cached = []
     for batch in loader:
         pre = batch["pre"].to(device)
         post = batch["post"].to(device)
         out = model(pre, post)
-        cached.append((torch.sigmoid(out["loc"].float()).cpu(), torch.softmax(out["damage"].float(), 1).cpu(), batch["loc"].long(), batch["target5"].long()))
+        cached.append((
+            torch.sigmoid(out["loc"].float()).cpu(),
+            torch.softmax(out["damage"].float(), 1).cpu(),
+            ordinal_distribution(out["ordinal"]).cpu(),
+            batch["loc"].long(), batch["target5"].long(),
+        ))
+    if fixed_config is None:
+        # Localization threshold does not depend on the damage calibration.
+        # Select it first by localization F1, reducing the damage grid from
+        # 150 full-resolution passes to 30 per validation epoch.
+        threshold_scores = []
+        for threshold in thresholds:
+            tp = fp = fn = 0
+            for loc_prob, _, _, loc_true, _ in cached:
+                prediction = loc_prob > threshold
+                truth = loc_true == 1
+                tp += int((prediction & truth).sum())
+                fp += int((prediction & ~truth).sum())
+                fn += int((~prediction & truth).sum())
+            threshold_scores.append((legacy.F1Recorder(tp, fp, fn).f1, float(threshold)))
+        selected_threshold = max(threshold_scores)[1]
+        configurations = [
+            {
+                "localization_threshold": threshold,
+                "ordinal_blend": blend,
+                "object_vote": vote,
+                "class_boosts": boosts,
+            }
+            for threshold in (selected_threshold,)
+            for blend in (0.0, 0.25, 0.5)
+            for vote in (False, True)
+            for boosts in INFERENCE_CLASS_BOOSTS
+        ]
+    else:
+        configurations = [fixed_config]
     best = None
-    for threshold in thresholds:
+    for config in configurations:
+        threshold = float(config["localization_threshold"])
+        blend = float(config["ordinal_blend"])
+        boosts = torch.tensor(config["class_boosts"], dtype=torch.float32).view(1, 4, 1, 1)
         counts = {"loc_tp": 0, "loc_fp": 0, "loc_fn": 0, **{c: {"tp": 0, "fp": 0, "fn": 0} for c in range(1, 5)}}
-        for loc_prob, damage_prob, loc_true, target5 in cached:
+        for loc_prob, damage_prob, ordinal_prob, loc_true, target5 in cached:
             loc_pred = (loc_prob > threshold).long()
-            pred = object_vote(damage_prob, loc_pred, min_pixels)
+            probability = ((1.0 - blend) * damage_prob + blend * ordinal_prob) * boosts
+            probability /= probability.sum(dim=1, keepdim=True).clamp_min(1e-7)
+            if bool(config["object_vote"]):
+                pred = object_vote(probability, loc_pred, min_pixels)
+            else:
+                pred = (probability.argmax(dim=1) + 1) * loc_pred
             update_counts(pred, loc_pred, loc_true, target5, counts)
         result = finalize_counts(counts, threshold)
-        if best is None or result["score"] > best["score"]:
-            best = result
+        result.update({
+            "ordinal_blend": blend,
+            "object_vote": bool(config["object_vote"]),
+            "class_boosts": [float(value) for value in config["class_boosts"]],
+        })
+        # Official harmonic score remains the primary criterion. Macro damage
+        # and localization break ties when a rare class has zero F1, avoiding
+        # the previous localization-only selection collapse.
+        ranking = (result["score"], result["damage_macro_f1"], result["localization_f1"])
+        if best is None or ranking > best[0]:
+            best = (ranking, result)
     assert best is not None
-    return best
+    return best[1]
 
 
 def make_optimizer(model: SwinDamageFormer, args: argparse.Namespace) -> torch.optim.Optimizer:
@@ -365,7 +553,9 @@ def print_result(label: str, result: Dict[str, float]) -> None:
         f"{label} | score={result['score']:.6f} | loc={result['localization_f1']:.6f} | "
         f"damage={result['damage_f1']:.6f} | no={result['damage_f1_no_damage']:.6f} | "
         f"minor={result['damage_f1_minor_damage']:.6f} | major={result['damage_f1_major_damage']:.6f} | "
-        f"destroyed={result['damage_f1_destroyed']:.6f} | loc_th={result['localization_threshold']:.2f}",
+        f"destroyed={result['damage_f1_destroyed']:.6f} | macro={result.get('damage_macro_f1', 0.0):.6f} | "
+        f"loc_th={result['localization_threshold']:.2f} | ordinal_blend={result.get('ordinal_blend', 0.0):.2f} | "
+        f"object_vote={result.get('object_vote', True)} | boosts={result.get('class_boosts', [1, 1, 1, 1])}",
         flush=True,
     )
 
@@ -389,6 +579,7 @@ def train(args: argparse.Namespace, device: torch.device) -> Path:
         )
     model.set_backbone_trainable(False)
     optimizer = make_optimizer(model, args)
+    ema = ModelEMA(model, args.ema_decay)
     loc_weight = legacy.make_loc_pos_weight(train_ds).to(device)
     loc_criterion = legacy.BinaryFocalDiceLoss(loc_weight, gamma=2.0).to(device)
     cls_weight = damage_weights(train_ds).to(device)
@@ -400,6 +591,17 @@ def train(args: argparse.Namespace, device: torch.device) -> Path:
         if epoch == args.freeze_backbone_epochs + 1:
             model.set_backbone_trainable(True)
             print("Unfroze Swin backbone for differential-LR training.", flush=True)
+        if epoch <= args.warmup_epochs:
+            lr_scale = epoch / max(args.warmup_epochs, 1)
+        else:
+            cosine_progress = (epoch - args.warmup_epochs) / max(args.epochs - args.warmup_epochs, 1)
+            lr_scale = 0.5 * (1.0 + math.cos(math.pi * cosine_progress))
+        for group, base_lr in zip(optimizer.param_groups, (args.backbone_lr, args.lr)):
+            group["lr"] = base_lr * lr_scale
+        print(
+            f"Epoch {epoch}: decoder_lr={optimizer.param_groups[1]['lr']:.8f}, "
+            f"backbone_lr={optimizer.param_groups[0]['lr']:.8f}", flush=True,
+        )
         model.train()
         meter = legacy.AverageMeter()
         optimizer.zero_grad(set_to_none=True)
@@ -417,7 +619,11 @@ def train(args: argparse.Namespace, device: torch.device) -> Path:
             damage_logits = out["damage"].float()
             ordinal_logits = out["ordinal"].float()
             loc_loss, _, _ = loc_criterion(loc_logits, loc.float())
-            ce = safe_cross_entropy(damage_logits, target, cls_weight)
+            ce = class_balanced_focal_loss(
+                damage_logits, target, cls_weight,
+                gamma=args.damage_focal_gamma,
+                label_smoothing=args.damage_label_smoothing,
+            )
             dice = soft_dice_loss(damage_logits, target, cls_weight)
             ordinal = ordinal_loss(ordinal_logits, target)
             instance = instance_consistency_loss(damage_logits, target5, args.min_instance_pixels)
@@ -440,23 +646,31 @@ def train(args: argparse.Namespace, device: torch.device) -> Path:
                 nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 scaler.step(optimizer)
                 scaler.update()
+                ema.update(model)
                 optimizer.zero_grad(set_to_none=True)
             meter.update(float(loss.item()), pre.shape[0])
             if step % 20 == 0 or step == len(train_loader):
                 print(f"Epoch {epoch}/{args.epochs} step {step}/{len(train_loader)} loss={meter.avg:.4f}", flush=True)
 
-        progress = epoch / max(args.epochs, 1)
-        for group, base_lr in zip(optimizer.param_groups, (args.backbone_lr, args.lr)):
-            group["lr"] = base_lr * 0.5 * (1.0 + math.cos(math.pi * progress))
-        val = evaluate(model, val_loader, device, args.thresholds, args.min_instance_pixels)
+        val = evaluate(ema.module, val_loader, device, args.thresholds, args.min_instance_pixels)
+        # A predeclared balanced selection score remains informative when the
+        # official harmonic damage score is near zero because one rare class
+        # is temporarily absent. The official score is still reported intact.
+        val["checkpoint_selection_score"] = 0.5 * val["score"] + 0.5 * val["macro_composite_score"]
         print_result(f"Validation epoch {epoch}", val)
-        row = {"epoch": epoch, "train_loss": meter.avg, **val}
+        print(f"Checkpoint selection score={val['checkpoint_selection_score']:.6f}", flush=True)
+        row = {
+            "epoch": epoch, "train_loss": meter.avg,
+            "decoder_lr": optimizer.param_groups[1]["lr"],
+            "backbone_lr": optimizer.param_groups[0]["lr"],
+            "validation_model": f"EMA(decay={args.ema_decay})", **val,
+        }
         history.append(row)
         (output / "history.json").write_text(json.dumps(history, indent=2))
-        save_checkpoint(output / "checkpoints" / "last.pt", model, optimizer, epoch, val if best_result is None else best_result, args)
-        if best_result is None or val["score"] > best_result["score"]:
+        save_checkpoint(output / "checkpoints" / "last.pt", ema.module, optimizer, epoch, val, args)
+        if best_result is None or val["checkpoint_selection_score"] > best_result["checkpoint_selection_score"]:
             best_result, best_epoch = val, epoch
-            save_checkpoint(output / "checkpoints" / "best.pt", model, optimizer, epoch, val, args)
+            save_checkpoint(output / "checkpoints" / "best.pt", ema.module, optimizer, epoch, val, args)
             print(f"Saved best checkpoint at epoch {epoch}.", flush=True)
         elif epoch - best_epoch >= args.patience:
             print(f"Early stopping: no improvement since epoch {best_epoch}.", flush=True)
@@ -469,8 +683,12 @@ def test(args: argparse.Namespace, device: torch.device, checkpoint: Path) -> Di
     model = SwinDamageFormer(args).to(device)
     ckpt = torch.load(checkpoint, map_location=device)
     model.load_state_dict(ckpt["model"], strict=True)
-    threshold = float(ckpt.get("best_results", {}).get("localization_threshold", 0.5))
-    result = evaluate(model, test_loader, device, [threshold], args.min_instance_pixels)
+    saved_result = ckpt.get("best_results", {})
+    config = inference_config_from_result(saved_result)
+    result = evaluate(
+        model, test_loader, device, [config["localization_threshold"]],
+        args.min_instance_pixels, fixed_config=config,
+    )
     result["checkpoint_epoch"] = int(ckpt.get("epoch", -1))
     print_result("FINAL TEST", result)
     scores = Path(args.output_dir) / "scores"
@@ -496,6 +714,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--epochs", type=int, default=80)
     p.add_argument("--patience", type=int, default=15)
     p.add_argument("--freeze-backbone-epochs", type=int, default=8)
+    p.add_argument("--warmup-epochs", type=int, default=5)
     p.add_argument("--batch-size", type=int, default=2)
     p.add_argument("--eval-batch-size", type=int, default=1)
     p.add_argument("--grad-accum-steps", type=int, default=4)
@@ -505,6 +724,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--crop-candidates", type=int, default=32)
     p.add_argument("--minor-crop-weight", type=float, default=16.0)
     p.add_argument("--major-crop-weight", type=float, default=16.0)
+    p.add_argument("--rare-tile-sampling", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--minor-tile-weight", type=float, default=4.0)
+    p.add_argument("--major-tile-weight", type=float, default=3.0)
+    p.add_argument("--destroyed-tile-weight", type=float, default=2.0)
     p.add_argument("--swin-variant", default="swin_tiny_patch4_window7_224")
     p.add_argument("--decoder-channels", type=int, default=192)
     p.add_argument("--temporal-heads", type=int, default=6)
@@ -515,6 +738,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max-grad-norm", type=float, default=1.0)
     p.add_argument("--ordinal-weight", type=float, default=0.25)
     p.add_argument("--instance-weight", type=float, default=0.5)
+    p.add_argument("--damage-focal-gamma", type=float, default=2.0)
+    p.add_argument("--damage-label-smoothing", type=float, default=0.02)
+    p.add_argument("--ema-decay", type=float, default=0.995)
     p.add_argument("--min-instance-pixels", type=int, default=8)
     p.add_argument("--thresholds", type=float, nargs="+", default=[0.35, 0.45, 0.55, 0.65, 0.75])
     p.add_argument("--seed", type=int, default=42)
