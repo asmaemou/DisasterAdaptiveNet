@@ -107,7 +107,8 @@ normalize_probability_names() {
 }
 
 generate_first_place_probabilities() {
-  local split=$1 destination=$FIRST_RAW/$split
+  local split=$1
+  local destination=$FIRST_RAW/$split
   normalize_probability_names "$destination"
   if python -u "$PROJECT_ROOT/transformer/scripts/validate_first_place_probability_cache.py" \
       --root "$destination" --manifest "$MANIFEST" --split "$split" --require-success-marker; then
