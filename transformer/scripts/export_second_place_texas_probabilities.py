@@ -26,10 +26,6 @@ def load_source(path: Path):
 
 def disable_constructor_pretraining() -> None:
     """Prevent legacy encoders from downloading weights before checkpoint load."""
-    unet_module = sys.modules.get("models.unet")
-    if unet_module is None or not hasattr(unet_module, "encoder_params"):
-        raise RuntimeError("Could not locate second-place encoder registry")
-
     def offline_constructor(original):
         def construct():
             try:
@@ -40,12 +36,36 @@ def disable_constructor_pretraining() -> None:
                 return original()
         return construct
 
-    for parameters in unet_module.encoder_params.values():
-        parameters["init_op"] = offline_constructor(parameters["init_op"])
-        parameters["url"] = None
+    registry_names = ("models.unet", "models.siamese_unet")
+    patched = 0
+    for registry_name in registry_names:
+        registry_module = sys.modules.get(registry_name)
+        if registry_module is None or not hasattr(registry_module, "encoder_params"):
+            raise RuntimeError(f"Could not locate second-place encoder registry: {registry_name}")
+        for encoder_name, parameters in registry_module.encoder_params.items():
+            if encoder_name.startswith("efficientnet-"):
+                # EfficientNet.from_pretrained downloads internally and has no
+                # `pretrained` keyword. from_name constructs the identical
+                # architecture without network access.
+                parameters["init_op"] = (
+                    lambda name=encoder_name, module=registry_module:
+                    module.EfficientNet.from_name(name)
+                )
+            else:
+                parameters["init_op"] = offline_constructor(parameters["init_op"])
+            parameters["url"] = None
+            patched += 1
+        remaining_urls = [
+            name for name, parameters in registry_module.encoder_params.items()
+            if parameters.get("url") is not None
+        ]
+        if remaining_urls:
+            raise RuntimeError(
+                f"Constructor downloads remain enabled in {registry_name}: {remaining_urls}"
+            )
     print(
         f"Disabled redundant constructor downloads for "
-        f"{len(unet_module.encoder_params)} second-place encoders; "
+        f"{patched} second-place encoders across localization and Siamese registries; "
         "complete fine-tuned checkpoints will be loaded next.",
         flush=True,
     )
