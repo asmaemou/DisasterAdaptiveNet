@@ -161,6 +161,8 @@ python -u transformer/scripts/export_swin_hrtbda_v5_turkey_probabilities.py \
 
 python -u transformer/scripts/eval_swin_first_place_texas_soft_ensemble.py \
   --swin-root "$SWIN_RAW" --first-place-root "$FIRST_RAW" \
+  --first-place-data-root "$FIRST_DATA" \
+  --minimum-first-place-val-loc-f1 0.8 \
   --output-dir "$RESULTS" \
   --alphas 0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1 \
   --betas 0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1 \

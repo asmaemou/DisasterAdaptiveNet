@@ -47,13 +47,14 @@ def fit_probability_canvas(
     native_height: int,
     native_width: int,
     output_size: int,
+    geometry: str,
 ) -> torch.Tensor:
     """Match the first-place dataset's fit_1024 geometry exactly.
 
     Images no larger than the target canvas are restored to native resolution
     and pasted at the top-left. Larger images are resized to the square target.
     """
-    if native_width <= output_size and native_height <= output_size:
+    if geometry == "top-left-pad" and native_width <= output_size and native_height <= output_size:
         restored = F.interpolate(
             probability,
             size=(native_height, native_width),
@@ -75,14 +76,14 @@ def fit_probability_canvas(
     )
 
 
-def native_truth(dataset, index: int, output_size: int) -> tuple[np.ndarray, np.ndarray]:
+def native_truth(dataset, index: int, output_size: int, geometry: str) -> tuple[np.ndarray, np.ndarray]:
     sample = dataset.samples[index]
     loc_raw = dataset._read_mask(sample.pre_target_path)
     damage_raw = dataset._read_mask(sample.post_target_path)
     target5 = dataset._target5_from_masks(loc_raw, damage_raw)
     loc = (loc_raw > 0).astype(np.uint8)
     native_height, native_width = loc.shape
-    if native_width <= output_size and native_height <= output_size:
+    if geometry == "top-left-pad" and native_width <= output_size and native_height <= output_size:
         loc_canvas = np.zeros((output_size, output_size), dtype=np.uint8)
         damage_canvas = np.zeros((output_size, output_size), dtype=np.uint8)
         loc_canvas[:native_height, :native_width] = loc
@@ -124,6 +125,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--splits", nargs="+", default=["val", "test"])
     parser.add_argument("--output-size", type=int, default=1024)
+    parser.add_argument(
+        "--geometry", choices=["top-left-pad", "stretch"], default="top-left-pad",
+        help="Coordinate mapping used by the winner pipeline being fused.",
+    )
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--overwrite", action="store_true")
@@ -242,16 +247,18 @@ def main() -> None:
                 damage_probability /= damage_probability.sum(dim=1, keepdim=True).clamp_min(1e-7)
 
                 loc_probability = fit_probability_canvas(
-                    loc_probability, native_height, native_width, args.output_size
+                    loc_probability, native_height, native_width, args.output_size, args.geometry
                 )
                 damage_probability = fit_probability_canvas(
-                    damage_probability, native_height, native_width, args.output_size
+                    damage_probability, native_height, native_width, args.output_size, args.geometry
                 )
                 damage_probability /= damage_probability.sum(
                     dim=1, keepdim=True
                 ).clamp_min(1e-7)
 
-                loc_true, damage_true = native_truth(dataset, zero_index, args.output_size)
+                loc_true, damage_true = native_truth(
+                    dataset, zero_index, args.output_size, args.geometry
+                )
                 np.savez_compressed(
                     destination,
                     loc_probability=loc_probability[0, 0].float().cpu().numpy().astype(np.float16),

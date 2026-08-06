@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import cv2
 
 import eval_hrtbda_first_place_turkey_soft_ensemble as fusion
 
@@ -56,11 +57,45 @@ def values(text: str):
     return [float(value) for value in text.split(",")]
 
 
+def verify_truth_alignment(samples, reference_root: Path, split: str) -> None:
+    mismatches = []
+    for sample in samples:
+        path = reference_root / split / "masks" / f"{sample['stem']}_pre_disaster.png"
+        reference = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+        if reference is None:
+            mismatches.append(f"missing reference mask: {path}")
+            continue
+        if reference.ndim == 3:
+            reference = reference[..., 0]
+        reference = (reference > 0).astype(np.uint8)
+        truth = (sample["loc_true"] > 0).astype(np.uint8)
+        if reference.shape != truth.shape:
+            mismatches.append(
+                f"{sample['stem']}: shape reference={reference.shape}, exported={truth.shape}"
+            )
+        elif not np.array_equal(reference, truth):
+            differing = int(np.count_nonzero(reference != truth))
+            mismatches.append(f"{sample['stem']}: {differing} localization pixels differ")
+    if mismatches:
+        preview = "\n".join(f"  - {item}" for item in mismatches[:20])
+        raise RuntimeError(
+            f"FAIL-FAST: {split} truth geometry does not match first-place coordinates "
+            f"for {len(mismatches)} sample(s):\n{preview}"
+        )
+    print(
+        f"PASS alignment gate: split={split}, samples={len(samples)}, "
+        "exported truth exactly matches first-place prepared masks",
+        flush=True,
+    )
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--swin-root", type=Path, required=True)
     parser.add_argument("--first-place-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--first-place-data-root", type=Path, required=True)
+    parser.add_argument("--minimum-first-place-val-loc-f1", type=float, default=0.8)
     parser.add_argument("--alphas", default="0,0.25,0.5,0.75,1")
     parser.add_argument("--betas", default="0,0.25,0.5,0.75,1")
     parser.add_argument("--thresholds", default="0.3,0.4,0.5,0.6,0.7")
@@ -75,6 +110,19 @@ def main():
     validation = fusion.load_split(args.swin_root / "val", args.first_place_root / "val")
     if len(validation) != args.expected_val_samples:
         raise RuntimeError(f"Expected {args.expected_val_samples} validation samples, found {len(validation)}")
+    verify_truth_alignment(validation, args.first_place_data_root, "val")
+    first_place_validation = evaluate(validation, "first_place")
+    print(
+        "First-place validation preflight:",
+        json.dumps(first_place_validation, indent=2),
+        flush=True,
+    )
+    if first_place_validation["localization_f1"] < args.minimum_first_place_val_loc_f1:
+        raise RuntimeError(
+            "FAIL-FAST: first-place validation localization F1 "
+            f"{first_place_validation['localization_f1']:.6f} is below required "
+            f"{args.minimum_first_place_val_loc_f1:.6f}; refusing to tune/report fusion"
+        )
     rows = []
     for alpha in values(args.alphas):
         for beta in values(args.betas):
@@ -106,6 +154,7 @@ def main():
     test = fusion.load_split(args.swin_root / "test", args.first_place_root / "test")
     if len(test) != args.expected_test_samples:
         raise RuntimeError(f"Expected {args.expected_test_samples} test samples, found {len(test)}")
+    verify_truth_alignment(test, args.first_place_data_root, "test")
     alpha = float(selected["swin_localization_weight"])
     beta = float(selected["swin_damage_weight"])
     threshold = float(selected["localization_threshold"])
