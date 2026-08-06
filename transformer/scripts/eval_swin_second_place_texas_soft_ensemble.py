@@ -20,6 +20,15 @@ def harmonic(values, epsilon=1e-6):
     return len(values) / sum(1.0 / max(float(value), epsilon) for value in values)
 
 
+def dilate_minor(damage, loc, kernel_size):
+    if kernel_size <= 1:
+        return damage
+    output = damage.copy()
+    minor = cv2.dilate((damage == 2).astype(np.uint8), np.ones((kernel_size, kernel_size), np.uint8)) > 0
+    output[minor & loc & (output == 1)] = 2
+    return output
+
+
 def load_split(swin_root: Path, second_root: Path):
     samples = []
     swin_files = sorted(swin_root.glob("*.npz"))
@@ -52,7 +61,7 @@ def load_split(swin_root: Path, second_root: Path):
     return samples
 
 
-def predict(sample, mode, alpha=0.5, beta=0.5, threshold=0.5):
+def predict(sample, mode, alpha=0.5, beta=0.5, threshold=0.5, minor_dilation_kernel=1):
     if mode == "swin":
         loc = sample["s_loc"] > sample["s_threshold"]
         damage = sample["s_damage"].argmax(axis=0).astype(np.uint8) + 1
@@ -66,16 +75,17 @@ def predict(sample, mode, alpha=0.5, beta=0.5, threshold=0.5):
         damage = damage_probability.argmax(axis=0).astype(np.uint8) + 1
     else:
         raise ValueError(mode)
+    damage = dilate_minor(damage, loc, minor_dilation_kernel)
     final_damage = np.zeros_like(damage, dtype=np.uint8)
     final_damage[loc] = damage[loc]
     return loc.astype(np.uint8), final_damage
 
 
-def evaluate(samples, mode, alpha=0.5, beta=0.5, threshold=0.5):
+def evaluate(samples, mode, alpha=0.5, beta=0.5, threshold=0.5, minor_dilation_kernel=1):
     loc_tp = loc_fp = loc_fn = 0
     counts = {class_id: [0, 0, 0] for class_id in range(1, 5)}
     for sample in samples:
-        loc, damage = predict(sample, mode, alpha, beta, threshold)
+        loc, damage = predict(sample, mode, alpha, beta, threshold, minor_dilation_kernel)
         loc_true = sample["loc_true"] > 0
         damage_true = sample["damage_true"]
         loc_tp += int(((loc == 1) & loc_true).sum())
@@ -109,10 +119,10 @@ def grid(text):
     return [float(value) for value in text.split(",")]
 
 
-def save_predictions(samples, output, alpha, beta, threshold):
+def save_predictions(samples, output, alpha, beta, threshold, minor_dilation_kernel):
     output.mkdir(parents=True, exist_ok=True)
     for sample in samples:
-        loc, damage = predict(sample, "hybrid", alpha, beta, threshold)
+        loc, damage = predict(sample, "hybrid", alpha, beta, threshold, minor_dilation_kernel)
         cv2.imwrite(str(output / f"{sample['stem']}_localization.png"), loc)
         cv2.imwrite(str(output / f"{sample['stem']}_damage.png"), damage)
 
@@ -128,6 +138,10 @@ def parse_args():
     parser.add_argument("--expected-val-samples", type=int, default=45)
     parser.add_argument("--expected-test-samples", type=int, default=46)
     parser.add_argument("--minimum-second-place-val-loc-f1", type=float, default=0.8)
+    parser.add_argument("--selection-objective", choices=["macro", "official"], default="macro")
+    parser.add_argument("--minor-dilation-kernel", type=int, default=1)
+    parser.add_argument("--experiment-label", default="Texas-fine-tuned ImageNet Swin-T + Texas-fine-tuned second-place xView2 soft ensemble")
+    parser.add_argument("--selection-label", default="Fusion selected only on Texas validation; held-out Texas test evaluated once.")
     return parser.parse_args()
 
 
@@ -137,7 +151,7 @@ def main():
     validation = load_split(args.swin_root / "val", args.second_place_root / "val")
     if len(validation) != args.expected_val_samples:
         raise RuntimeError(f"Expected {args.expected_val_samples} validation samples, found {len(validation)}")
-    second_validation = evaluate(validation, "second_place")
+    second_validation = evaluate(validation, "second_place", minor_dilation_kernel=args.minor_dilation_kernel)
     print("Second-place validation preflight:", json.dumps(second_validation, indent=2), flush=True)
     if second_validation["localization_f1"] < args.minimum_second_place_val_loc_f1:
         raise RuntimeError(
@@ -154,10 +168,11 @@ def main():
                     "swin_localization_weight": alpha,
                     "swin_damage_weight": beta,
                     "localization_threshold": threshold,
-                    **evaluate(validation, "hybrid", alpha, beta, threshold),
+                    **evaluate(validation, "hybrid", alpha, beta, threshold, args.minor_dilation_kernel),
                 })
+    objective = "harmonic_composite_score" if args.selection_objective == "official" else "macro_composite_score"
     rows.sort(
-        key=lambda row: (row["macro_composite_score"], row["macro_damage_f1"], row["localization_f1"]),
+        key=lambda row: (row[objective], row["macro_damage_f1"], row["localization_f1"]),
         reverse=True,
     )
     selected = rows[0]
@@ -174,21 +189,23 @@ def main():
     beta = float(selected["swin_damage_weight"])
     threshold = float(selected["localization_threshold"])
     test_metrics = {
-        "swin": evaluate(test, "swin"),
-        "second_place": evaluate(test, "second_place"),
-        "equal_ensemble": evaluate(test, "hybrid", 0.5, 0.5, 0.5),
-        "selected_ensemble": evaluate(test, "hybrid", alpha, beta, threshold),
+        "swin": evaluate(test, "swin", minor_dilation_kernel=args.minor_dilation_kernel),
+        "second_place": evaluate(test, "second_place", minor_dilation_kernel=args.minor_dilation_kernel),
+        "equal_ensemble": evaluate(test, "hybrid", 0.5, 0.5, 0.5, args.minor_dilation_kernel),
+        "selected_ensemble": evaluate(test, "hybrid", alpha, beta, threshold, args.minor_dilation_kernel),
     }
-    save_predictions(test, args.output_dir / "selected_test_predictions", alpha, beta, threshold)
+    save_predictions(test, args.output_dir / "selected_test_predictions", alpha, beta, threshold, args.minor_dilation_kernel)
     summary = {
-        "experiment": "Texas-fine-tuned ImageNet Swin-T + Texas-fine-tuned second-place xView2 soft ensemble",
-        "selection": "Fusion selected only on Texas validation; held-out Texas test evaluated once.",
+        "experiment": args.experiment_label,
+        "selection": args.selection_label,
+        "selection_objective": objective,
         "selected_parameters": {
             "swin_localization_weight": alpha,
             "second_place_localization_weight": 1.0 - alpha,
             "swin_damage_weight": beta,
             "second_place_damage_weight": 1.0 - beta,
             "localization_threshold": threshold,
+            "minor_dilation_kernel": args.minor_dilation_kernel,
         },
         "validation_samples": len(validation),
         "test_samples": len(test),

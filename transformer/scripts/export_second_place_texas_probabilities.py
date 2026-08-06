@@ -208,6 +208,8 @@ def main():
             loc_true=loc_true,
             damage_true=damage_true,
         )
+    for split in args.splits:
+        (args.output_root / split / "_SUCCESS_V1").touch()
     print(f"Wrote second-place probability maps under: {args.output_root}", flush=True)
 
 

@@ -69,6 +69,16 @@ date
 hostname
 nvidia-smi || true
 
+# The released predictors share FIRST_BASE/test and cannot safely run for two
+# datasets at once. Fail immediately instead of silently mixing datasets.
+exec 9>"$FIRST_BASE/.first_place_inference.lock"
+if ! flock -n 9; then
+  echo "ERROR: another first-place xView2 inference job owns the shared legacy workspace."
+  echo "Wait for that job to finish, then resubmit this job."
+  exit 1
+fi
+echo "Acquired exclusive first-place inference workspace lock."
+
 cd "$FIRST_BASE"
 python -u custom/patch_first_place_official_split.py
 python -u custom/setup_turkey_ft_weights.py
@@ -110,6 +120,9 @@ generate_first_place_probabilities() {
   cleanup_predictor_outputs
   rm -rf test
   ln -sfn "$FIRST_DATA/$split" test
+  test "$(readlink -f test)" = "$(readlink -f "$FIRST_DATA/$split")" || {
+    echo "ERROR: first-place test link does not point to requested split=$split"; exit 1;
+  }
   bash -e predict.sh
   normalize_probability_names "$FIRST_BASE"
   rm -rf "$destination"; mkdir -p "$destination"

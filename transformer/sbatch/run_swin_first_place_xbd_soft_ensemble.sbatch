@@ -68,6 +68,16 @@ date
 hostname
 nvidia-smi || true
 
+# All released first-place scripts read the same mutable FIRST_BASE/test link.
+# Prevent concurrent dataset jobs from changing it during a multi-model pass.
+exec 9>"$FIRST_BASE/.first_place_inference.lock"
+if ! flock -n 9; then
+  echo "ERROR: another first-place xView2 inference job owns the shared legacy workspace."
+  echo "Wait for that job to finish, then resubmit this job."
+  exit 1
+fi
+echo "Acquired exclusive first-place inference workspace lock."
+
 python -u transformer/scripts/prepare_xbd_first_place_ensemble_view.py \
   --xbd-root "$XBD_ROOT" --output-root "$COMMON_VIEW"
 MANIFEST=$COMMON_VIEW/official_split_manifest.csv
@@ -118,6 +128,9 @@ generate_first_place_probabilities() {
   cleanup_predictor_outputs
   rm -rf test
   ln -sfn "$COMMON_VIEW/$split" test
+  test "$(readlink -f test)" = "$(readlink -f "$COMMON_VIEW/$split")" || {
+    echo "ERROR: first-place test link does not point to requested split=$split"; exit 1;
+  }
   bash -e predict.sh
   normalize_probability_names "$FIRST_BASE"
   rm -rf "$destination"; mkdir -p "$destination"
