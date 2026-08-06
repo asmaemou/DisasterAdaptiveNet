@@ -46,10 +46,12 @@ def arguments():
 
 
 def read_rgb(path: Path, size: int):
+    # Paper/released third-place pipeline deliberately feeds OpenCV's native
+    # BGR arrays into Albumentations normalization.  Preserve that historical
+    # channel order exactly; converting to RGB changes every model input.
     image = cv2.imread(str(path), cv2.IMREAD_COLOR)
     if image is None:
         raise FileNotFoundError(path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     return cv2.resize(image, (size, size), interpolation=cv2.INTER_LINEAR)
 
 
@@ -134,7 +136,7 @@ def main():
             damage_prediction=damage_prediction.astype(np.uint8),
             loc_true=loc_true, damage_true=damage_true)
     for split in args.splits:
-        (args.output_root / split / "_SUCCESS").touch()
+        (args.output_root / split / "_SUCCESS_BGR_V1").touch()
     print(f"Wrote third-place probability maps under: {args.output_root}", flush=True)
 
 

@@ -65,7 +65,7 @@ nvidia-smi || true
 
 THIRD_VAL_COUNT=$(find "$THIRD_RAW/val" -maxdepth 1 -type f -name '*.npz' 2>/dev/null | wc -l)
 THIRD_TEST_COUNT=$(find "$THIRD_RAW/test" -maxdepth 1 -type f -name '*.npz' 2>/dev/null | wc -l)
-if [ -f "$THIRD_RAW/val/_SUCCESS" ] && [ -f "$THIRD_RAW/test/_SUCCESS" ] && \
+if [ -f "$THIRD_RAW/val/_SUCCESS_BGR_V1" ] && [ -f "$THIRD_RAW/test/_SUCCESS_BGR_V1" ] && \
    [ "$THIRD_VAL_COUNT" -eq 45 ] && [ "$THIRD_TEST_COUNT" -eq 46 ]; then
   echo "Reusing complete third-place probability cache: $THIRD_RAW"
 else
