@@ -42,17 +42,55 @@ def saved(checkpoint: dict, key: str, fallback):
     return saved_args.get(key, fallback) if isinstance(saved_args, dict) else fallback
 
 
+def fit_probability_canvas(
+    probability: torch.Tensor,
+    native_height: int,
+    native_width: int,
+    output_size: int,
+) -> torch.Tensor:
+    """Match the first-place dataset's fit_1024 geometry exactly.
+
+    Images no larger than the target canvas are restored to native resolution
+    and pasted at the top-left. Larger images are resized to the square target.
+    """
+    if native_width <= output_size and native_height <= output_size:
+        restored = F.interpolate(
+            probability,
+            size=(native_height, native_width),
+            mode="bilinear",
+            align_corners=False,
+        )
+        canvas = torch.zeros(
+            (*restored.shape[:-2], output_size, output_size),
+            dtype=restored.dtype,
+            device=restored.device,
+        )
+        canvas[..., :native_height, :native_width] = restored
+        return canvas
+    return F.interpolate(
+        probability,
+        size=(output_size, output_size),
+        mode="bilinear",
+        align_corners=False,
+    )
+
+
 def native_truth(dataset, index: int, output_size: int) -> tuple[np.ndarray, np.ndarray]:
     sample = dataset.samples[index]
     loc_raw = dataset._read_mask(sample.pre_target_path)
     damage_raw = dataset._read_mask(sample.post_target_path)
     target5 = dataset._target5_from_masks(loc_raw, damage_raw)
     loc = (loc_raw > 0).astype(np.uint8)
-    if loc.shape != (output_size, output_size):
+    native_height, native_width = loc.shape
+    if native_width <= output_size and native_height <= output_size:
+        loc_canvas = np.zeros((output_size, output_size), dtype=np.uint8)
+        damage_canvas = np.zeros((output_size, output_size), dtype=np.uint8)
+        loc_canvas[:native_height, :native_width] = loc
+        damage_canvas[:native_height, :native_width] = target5
+        loc, target5 = loc_canvas, damage_canvas
+    elif loc.shape != (output_size, output_size):
         loc = cv2.resize(loc, (output_size, output_size), interpolation=cv2.INTER_NEAREST)
-        target5 = cv2.resize(
-            target5, (output_size, output_size), interpolation=cv2.INTER_NEAREST
-        )
+        target5 = cv2.resize(target5, (output_size, output_size), interpolation=cv2.INTER_NEAREST)
     return loc, target5.astype(np.uint8)
 
 
@@ -195,27 +233,23 @@ def main() -> None:
 
                 pre = batch["pre"].to(device, non_blocking=True)
                 post = batch["post"].to(device, non_blocking=True)
+                native_sample = dataset.samples[zero_index]
+                native_mask = dataset._read_mask(native_sample.pre_target_path)
+                native_height, native_width = native_mask.shape[:2]
                 loc_probability = torch.sigmoid(phase1(pre)).unsqueeze(1)
                 damage_logits = model_code.get_damage_logits(phase2(pre, post))
                 damage_probability = torch.sigmoid(damage_logits)
                 damage_probability /= damage_probability.sum(dim=1, keepdim=True).clamp_min(1e-7)
 
-                if img_size != args.output_size:
-                    loc_probability = F.interpolate(
-                        loc_probability,
-                        size=(args.output_size, args.output_size),
-                        mode="bilinear",
-                        align_corners=False,
-                    )
-                    damage_probability = F.interpolate(
-                        damage_probability,
-                        size=(args.output_size, args.output_size),
-                        mode="bilinear",
-                        align_corners=False,
-                    )
-                    damage_probability /= damage_probability.sum(
-                        dim=1, keepdim=True
-                    ).clamp_min(1e-7)
+                loc_probability = fit_probability_canvas(
+                    loc_probability, native_height, native_width, args.output_size
+                )
+                damage_probability = fit_probability_canvas(
+                    damage_probability, native_height, native_width, args.output_size
+                )
+                damage_probability /= damage_probability.sum(
+                    dim=1, keepdim=True
+                ).clamp_min(1e-7)
 
                 loc_true, damage_true = native_truth(dataset, zero_index, args.output_size)
                 np.savez_compressed(

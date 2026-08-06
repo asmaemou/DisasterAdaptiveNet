@@ -84,8 +84,16 @@ def main():
                     "localization_threshold": threshold,
                     **evaluate(validation, "hybrid", alpha, beta, threshold),
                 })
+    # Match the metric used by the standalone Texas winner evaluations and in
+    # the paper tables: 0.3 * localization F1 + 0.7 * macro damage-class F1.
+    # The harmonic score remains a diagnostic but must not select a different
+    # model than the reported macro-composite objective.
     rows.sort(
-        key=lambda row: (row["official_xview2_score"], row["harmonic_damage_f1"], row["macro_damage_f1"]),
+        key=lambda row: (
+            row["macro_composite_score"],
+            row["macro_damage_f1"],
+            row["localization_f1"],
+        ),
         reverse=True,
     )
     selected = rows[0]

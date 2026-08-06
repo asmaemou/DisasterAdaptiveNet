@@ -17,7 +17,9 @@ FIRST_BASE=$PROJECT_ROOT/baselines/xview2_winners/xview2_first_place
 FIRST_DATA=$PROJECT_ROOT/output/xview2_baseline_datasets/first_place_texas_tornadoes_FINE_TUNE_OFFICIAL_SPLIT
 FIRST_WEIGHTS=$FIRST_BASE/weights/texas_tornadoes_finetuned_weights_official_split
 SWIN_EXPERIMENT=$PROJECT_ROOT/output/SwinImageNet-DirectTexas_TEXAS_TORNADOES
-ENSEMBLE_ROOT=$PROJECT_ROOT/output/SwinFirstPlaceSoftEnsemble_TEXAS_TORNADOES
+# Keep this geometry-corrected, macro-selected experiment completely separate
+# from the earlier soft-ensemble run and its archived predictions/results.
+ENSEMBLE_ROOT=$PROJECT_ROOT/output/SwinFirstPlaceSoftEnsembleAlignedMacro_TEXAS_TORNADOES
 FIRST_RAW=$ENSEMBLE_ROOT/probabilities/first_place
 SWIN_RAW=$ENSEMBLE_ROOT/probabilities/swin
 RESULTS=$ENSEMBLE_ROOT/results
@@ -155,13 +157,14 @@ python -u transformer/scripts/export_swin_hrtbda_v5_turkey_probabilities.py \
   --data-root /homes/j244s673/documents/wsu/phd/texas_tornadoes_preprocessed \
   --output-root "$SWIN_RAW" \
   --split-manifest "$FIRST_DATA/official_split_manifest.csv" \
-  --splits val test --output-size 1024 --num-workers 0 --device cuda
+  --splits val test --output-size 1024 --num-workers 0 --device cuda --overwrite
 
 python -u transformer/scripts/eval_swin_first_place_texas_soft_ensemble.py \
   --swin-root "$SWIN_RAW" --first-place-root "$FIRST_RAW" \
   --output-dir "$RESULTS" \
-  --alphas 0,0.25,0.5,0.75,1 --betas 0,0.25,0.5,0.75,1 \
-  --thresholds 0.3,0.4,0.5,0.6,0.7 \
+  --alphas 0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1 \
+  --betas 0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1 \
+  --thresholds 0.2,0.3,0.4,0.5,0.6,0.7,0.8 \
   --expected-val-samples 45 --expected-test-samples 46
 
 cat "$RESULTS/ensemble_metrics.txt"
