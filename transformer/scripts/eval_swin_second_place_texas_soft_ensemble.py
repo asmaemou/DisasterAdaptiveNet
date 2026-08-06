@@ -66,7 +66,10 @@ def predict(sample, mode, alpha=0.5, beta=0.5, threshold=0.5, minor_dilation_ker
         loc = sample["s_loc"] > sample["s_threshold"]
         damage = sample["s_damage"].argmax(axis=0).astype(np.uint8) + 1
     elif mode == "second_place":
-        loc = sample["w_loc_prediction"] > 0
+        # The winner's raw localization ensemble is reliable, but its legacy
+        # combined loc/damage post-processing is not calibrated consistently
+        # across target datasets. Select this threshold on validation only.
+        loc = sample["w_loc"] > threshold
         damage = sample["w_damage_prediction"].astype(np.uint8)
     elif mode == "hybrid":
         loc_probability = alpha * sample["s_loc"] + (1.0 - alpha) * sample["w_loc"]
@@ -151,8 +154,22 @@ def main():
     validation = load_split(args.swin_root / "val", args.second_place_root / "val")
     if len(validation) != args.expected_val_samples:
         raise RuntimeError(f"Expected {args.expected_val_samples} validation samples, found {len(validation)}")
-    second_validation = evaluate(validation, "second_place", minor_dilation_kernel=args.minor_dilation_kernel)
+    calibration_rows = []
+    for threshold in values("0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95"):
+        metrics = evaluate(
+            validation, "second_place", threshold=threshold,
+            minor_dilation_kernel=args.minor_dilation_kernel,
+        )
+        calibration_rows.append({"second_place_localization_threshold": threshold, **metrics})
+    calibration_rows.sort(key=lambda row: (row["localization_f1"], row["harmonic_damage_f1"]), reverse=True)
+    second_calibration = calibration_rows[0]
+    second_threshold = float(second_calibration["second_place_localization_threshold"])
+    second_validation = {key: value for key, value in second_calibration.items() if key != "second_place_localization_threshold"}
+    with (args.output_dir / "second_place_localization_calibration.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(calibration_rows[0]))
+        writer.writeheader(); writer.writerows(calibration_rows)
     print("Second-place validation preflight:", json.dumps(second_validation, indent=2), flush=True)
+    print(f"Second-place localization threshold selected on validation: {second_threshold:.2f}", flush=True)
     if second_validation["localization_f1"] < args.minimum_second_place_val_loc_f1:
         raise RuntimeError(
             f"FAIL-FAST: second-place validation localization F1 "
@@ -180,7 +197,7 @@ def main():
         writer = csv.DictWriter(handle, fieldnames=list(selected))
         writer.writeheader()
         writer.writerows(rows)
-    print("Selected on Texas validation only:", json.dumps(selected, indent=2), flush=True)
+    print("Selected on validation only:", json.dumps(selected, indent=2), flush=True)
 
     test = load_split(args.swin_root / "test", args.second_place_root / "test")
     if len(test) != args.expected_test_samples:
@@ -190,7 +207,7 @@ def main():
     threshold = float(selected["localization_threshold"])
     test_metrics = {
         "swin": evaluate(test, "swin", minor_dilation_kernel=args.minor_dilation_kernel),
-        "second_place": evaluate(test, "second_place", minor_dilation_kernel=args.minor_dilation_kernel),
+        "second_place": evaluate(test, "second_place", threshold=second_threshold, minor_dilation_kernel=args.minor_dilation_kernel),
         "equal_ensemble": evaluate(test, "hybrid", 0.5, 0.5, 0.5, args.minor_dilation_kernel),
         "selected_ensemble": evaluate(test, "hybrid", alpha, beta, threshold, args.minor_dilation_kernel),
     }
@@ -210,6 +227,7 @@ def main():
         "validation_samples": len(validation),
         "test_samples": len(test),
         "validation_second_place_preflight": second_validation,
+        "second_place_localization_threshold_selected_on_validation": second_threshold,
         "test_metrics": test_metrics,
     }
     (args.output_dir / "ensemble_metrics.json").write_text(json.dumps(summary, indent=2) + "\n")
