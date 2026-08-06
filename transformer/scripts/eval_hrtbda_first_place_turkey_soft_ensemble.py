@@ -34,6 +34,7 @@ FIRST_LOC_FOLDERS = [
     "pred154_loc",
 ]
 CLASS_NAMES = {1: "no_damage", 2: "minor_damage", 3: "major_damage", 4: "destroyed"}
+MINOR_DILATION_KERNEL = 3
 
 
 def read_unchanged(path: Path) -> np.ndarray:
@@ -113,7 +114,7 @@ def predictions(sample, mode: str, alpha=0.5, beta=0.5, threshold=0.5):
     if mode == "hrtbda":
         loc = sample["h_loc"] > sample["h_threshold"]
         damage = sample["h_damage"].argmax(axis=0).astype(np.uint8) + 1
-        damage = dilate_minor(damage, loc, 3)
+        damage = dilate_minor(damage, loc, MINOR_DILATION_KERNEL)
     elif mode == "first_place":
         damage = sample["f_damage"].argmax(axis=0).astype(np.uint8) + 1
         probability = sample["f_loc"]
@@ -122,7 +123,7 @@ def predictions(sample, mode: str, alpha=0.5, beta=0.5, threshold=0.5):
             | ((probability > 0.13) & (damage > 1) & (damage < 4))
             | ((probability > 0.14) & (damage > 1))
         )
-        damage = dilate_minor(damage, loc, 5)
+        damage = dilate_minor(damage, loc, MINOR_DILATION_KERNEL)
     elif mode == "hybrid":
         loc_probability = alpha * sample["h_loc"] + (1.0 - alpha) * sample["f_loc"]
         damage_probability = (
@@ -130,7 +131,7 @@ def predictions(sample, mode: str, alpha=0.5, beta=0.5, threshold=0.5):
         )
         loc = loc_probability > threshold
         damage = damage_probability.argmax(axis=0).astype(np.uint8) + 1
-        damage = dilate_minor(damage, loc, 3)
+        damage = dilate_minor(damage, loc, MINOR_DILATION_KERNEL)
     else:
         raise ValueError(mode)
 

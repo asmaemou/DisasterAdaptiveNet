@@ -60,7 +60,11 @@ def values(text: str):
 def verify_truth_alignment(samples, reference_root: Path, split: str) -> None:
     mismatches = []
     for sample in samples:
-        path = reference_root / split / "masks" / f"{sample['stem']}_pre_disaster.png"
+        candidates = [
+            reference_root / split / "masks" / f"{sample['stem']}_pre_disaster.png",
+            reference_root / split / "targets" / f"{sample['stem']}_pre_disaster_target.png",
+        ]
+        path = next((candidate for candidate in candidates if candidate.is_file()), candidates[0])
         reference = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
         if reference is None:
             mismatches.append(f"missing reference mask: {path}")
@@ -101,11 +105,16 @@ def parse_args():
     parser.add_argument("--thresholds", default="0.3,0.4,0.5,0.6,0.7")
     parser.add_argument("--expected-val-samples", type=int, default=45)
     parser.add_argument("--expected-test-samples", type=int, default=46)
+    parser.add_argument("--selection-objective", choices=["macro", "official"], default="macro")
+    parser.add_argument("--minor-dilation-kernel", type=int, default=3)
+    parser.add_argument("--experiment-label", default="Texas-fine-tuned ImageNet Swin-T + Texas-fine-tuned first-place xView2 soft ensemble")
+    parser.add_argument("--selection-label", default="Fusion weights and localization threshold selected only on Texas validation; Texas test evaluated once.")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    fusion.MINOR_DILATION_KERNEL = args.minor_dilation_kernel
     args.output_dir.mkdir(parents=True, exist_ok=True)
     validation = fusion.load_split(args.swin_root / "val", args.first_place_root / "val")
     if len(validation) != args.expected_val_samples:
@@ -136,9 +145,10 @@ def main():
     # the paper tables: 0.3 * localization F1 + 0.7 * macro damage-class F1.
     # The harmonic score remains a diagnostic but must not select a different
     # model than the reported macro-composite objective.
+    objective = "official_xview2_score" if args.selection_objective == "official" else "macro_composite_score"
     rows.sort(
         key=lambda row: (
-            row["macro_composite_score"],
+            row[objective],
             row["macro_damage_f1"],
             row["localization_f1"],
         ),
@@ -149,7 +159,7 @@ def main():
         writer = csv.DictWriter(handle, fieldnames=list(selected))
         writer.writeheader()
         writer.writerows(rows)
-    print("Selected on Texas validation only:", json.dumps(selected, indent=2), flush=True)
+    print("Selected on validation only:", json.dumps(selected, indent=2), flush=True)
 
     test = fusion.load_split(args.swin_root / "test", args.first_place_root / "test")
     if len(test) != args.expected_test_samples:
@@ -172,8 +182,9 @@ def main():
     }
     fusion.save_predictions(test, args.output_dir / "selected_test_predictions", alpha, beta, threshold)
     summary = {
-        "experiment": "Texas-fine-tuned ImageNet Swin-T + Texas-fine-tuned first-place xView2 soft ensemble",
-        "selection": "Fusion weights and localization threshold selected only on Texas validation; Texas test evaluated once.",
+        "experiment": args.experiment_label,
+        "selection": args.selection_label,
+        "selection_objective": objective,
         "alpha_definition": "Swin localization probability weight",
         "beta_definition": "Swin damage probability weight",
         "selected_parameters": {
@@ -182,6 +193,7 @@ def main():
             "swin_damage_weight": beta,
             "first_place_damage_weight": 1.0 - beta,
             "localization_threshold": threshold,
+            "minor_dilation_kernel": args.minor_dilation_kernel,
         },
         "validation_samples": len(validation), "test_samples": len(test),
         "validation_metrics": validation_metrics, "test_metrics": test_metrics,
