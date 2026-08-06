@@ -24,6 +24,33 @@ def load_source(path: Path):
     return module
 
 
+def disable_constructor_pretraining() -> None:
+    """Prevent legacy encoders from downloading weights before checkpoint load."""
+    unet_module = sys.modules.get("models.unet")
+    if unet_module is None or not hasattr(unet_module, "encoder_params"):
+        raise RuntimeError("Could not locate second-place encoder registry")
+
+    def offline_constructor(original):
+        def construct():
+            try:
+                return original(pretrained=None)
+            except TypeError as error:
+                if "pretrained" not in str(error):
+                    raise
+                return original()
+        return construct
+
+    for parameters in unet_module.encoder_params.values():
+        parameters["init_op"] = offline_constructor(parameters["init_op"])
+        parameters["url"] = None
+    print(
+        f"Disabled redundant constructor downloads for "
+        f"{len(unet_module.encoder_params)} second-place encoders; "
+        "complete fine-tuned checkpoints will be loaded next.",
+        flush=True,
+    )
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     project = Path("/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet")
@@ -55,6 +82,7 @@ def main():
         raise RuntimeError("CUDA is required for the second-place ensemble exporter")
 
     source = load_source(args.source_script)
+    disable_constructor_pretraining()
     source.FT_EXP = args.finetune_root
     source.DEVICE = torch.device("cuda")
 
