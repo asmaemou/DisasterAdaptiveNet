@@ -20,6 +20,15 @@ def harmonic(values, epsilon=1e-6):
     return len(values) / sum(1.0 / max(float(value), epsilon) for value in values)
 
 
+def dilate_minor(damage, loc, kernel_size):
+    if kernel_size <= 1:
+        return damage
+    output = damage.copy()
+    minor = cv2.dilate((damage == 2).astype(np.uint8), np.ones((kernel_size, kernel_size), np.uint8)) > 0
+    output[minor & loc & (output == 1)] = 2
+    return output
+
+
 def load_split(swin_root: Path, winner_root: Path):
     swin_files = sorted(swin_root.glob("*.npz"))
     winner_files = {path.stem: path for path in winner_root.glob("*.npz")}
@@ -48,7 +57,7 @@ def load_split(swin_root: Path, winner_root: Path):
     return samples
 
 
-def predict(sample, mode, alpha=.5, beta=.5, threshold=.5):
+def predict(sample, mode, alpha=.5, beta=.5, threshold=.5, minor_dilation_kernel=1):
     if mode == "swin":
         loc = sample["s_loc"] > sample["s_threshold"]
         damage = sample["s_damage"].argmax(0).astype(np.uint8) + 1
@@ -60,16 +69,17 @@ def predict(sample, mode, alpha=.5, beta=.5, threshold=.5):
         damage = (beta * sample["s_damage"] + (1-beta) * sample["w_damage"]).argmax(0).astype(np.uint8) + 1
     else:
         raise ValueError(mode)
+    damage = dilate_minor(damage, loc, minor_dilation_kernel)
     final = np.zeros_like(damage, np.uint8)
     final[loc] = damage[loc]
     return loc.astype(np.uint8), final
 
 
-def evaluate(samples, mode, alpha=.5, beta=.5, threshold=.5):
+def evaluate(samples, mode, alpha=.5, beta=.5, threshold=.5, minor_dilation_kernel=1):
     loc_counts = [0, 0, 0]
     damage_counts = {class_id: [0, 0, 0] for class_id in range(1, 5)}
     for sample in samples:
-        loc, damage = predict(sample, mode, alpha, beta, threshold)
+        loc, damage = predict(sample, mode, alpha, beta, threshold, minor_dilation_kernel)
         truth_loc = sample["loc_true"] > 0
         loc_counts[0] += int(((loc == 1) & truth_loc).sum())
         loc_counts[1] += int(((loc == 1) & ~truth_loc).sum())
@@ -100,6 +110,20 @@ def values(text):
     return [float(item) for item in text.split(",")]
 
 
+def strided_samples(samples, stride):
+    if stride <= 1:
+        return samples
+    output = []
+    for sample in samples:
+        reduced = dict(sample)
+        for key in ("s_loc", "w_loc", "w_loc_prediction", "w_damage_prediction", "loc_true", "damage_true"):
+            reduced[key] = sample[key][::stride, ::stride]
+        for key in ("s_damage", "w_damage"):
+            reduced[key] = sample[key][:, ::stride, ::stride]
+        output.append(reduced)
+    return output
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--swin-root", type=Path, required=True)
@@ -111,25 +135,33 @@ def main():
     parser.add_argument("--expected-val-samples", type=int, default=45)
     parser.add_argument("--expected-test-samples", type=int, default=46)
     parser.add_argument("--minimum-third-place-val-loc-f1", type=float, default=.8)
+    parser.add_argument("--selection-objective", choices=["macro", "official"], default="macro")
+    parser.add_argument("--minor-dilation-kernel", type=int, default=1)
+    parser.add_argument("--experiment-label", default="Texas-fine-tuned ImageNet Swin-T + Texas-fine-tuned third-place xView2 soft ensemble")
+    parser.add_argument("--selection-label", default="Fusion selected only on Texas validation; held-out Texas test evaluated once.")
+    parser.add_argument("--selection-stride", type=int, default=1)
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     validation = load_split(args.swin_root / "val", args.third_place_root / "val")
     if len(validation) != args.expected_val_samples:
         raise RuntimeError(f"Expected {args.expected_val_samples} validation samples, found {len(validation)}")
-    preflight = evaluate(validation, "third_place")
+    preflight = evaluate(validation, "third_place", minor_dilation_kernel=args.minor_dilation_kernel)
     print("Third-place validation reproduction gate:", json.dumps(preflight, indent=2), flush=True)
     if preflight["localization_f1"] < args.minimum_third_place_val_loc_f1:
         raise RuntimeError(f"FAIL-FAST: third-place validation localization F1 {preflight['localization_f1']:.6f} is below {args.minimum_third_place_val_loc_f1:.6f}; test was not evaluated")
 
     rows = []
+    selection_validation = strided_samples(validation, args.selection_stride)
+    print(f"Fusion-grid validation pixel stride: {args.selection_stride}", flush=True)
     for alpha in values(args.alphas):
         for beta in values(args.betas):
             for threshold in values(args.thresholds):
                 rows.append({"swin_localization_weight": alpha, "swin_damage_weight": beta,
                              "localization_threshold": threshold,
-                             **evaluate(validation, "hybrid", alpha, beta, threshold)})
-    rows.sort(key=lambda row: (row["macro_composite_score"], row["macro_damage_f1"], row["localization_f1"]), reverse=True)
+                             **evaluate(selection_validation, "hybrid", alpha, beta, threshold, args.minor_dilation_kernel)})
+    objective = "official_xview2_score" if args.selection_objective == "official" else "macro_composite_score"
+    rows.sort(key=lambda row: (row[objective], row["macro_damage_f1"], row["localization_f1"]), reverse=True)
     selected = rows[0]
     with (args.output_dir / "validation_fusion_grid.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(selected)); writer.writeheader(); writer.writerows(rows)
@@ -139,19 +171,23 @@ def main():
     if len(test) != args.expected_test_samples:
         raise RuntimeError(f"Expected {args.expected_test_samples} test samples, found {len(test)}")
     alpha, beta, threshold = (selected["swin_localization_weight"], selected["swin_damage_weight"], selected["localization_threshold"])
-    metrics = {"swin": evaluate(test, "swin"), "third_place": evaluate(test, "third_place"),
-               "equal_ensemble": evaluate(test, "hybrid", .5, .5, .5),
-               "selected_ensemble": evaluate(test, "hybrid", alpha, beta, threshold)}
+    metrics = {"swin": evaluate(test, "swin", minor_dilation_kernel=args.minor_dilation_kernel),
+               "third_place": evaluate(test, "third_place", minor_dilation_kernel=args.minor_dilation_kernel),
+               "equal_ensemble": evaluate(test, "hybrid", .5, .5, .5, args.minor_dilation_kernel),
+               "selected_ensemble": evaluate(test, "hybrid", alpha, beta, threshold, args.minor_dilation_kernel)}
     prediction_dir = args.output_dir / "selected_test_predictions"; prediction_dir.mkdir(parents=True, exist_ok=True)
     for sample in test:
-        loc, damage = predict(sample, "hybrid", alpha, beta, threshold)
+        loc, damage = predict(sample, "hybrid", alpha, beta, threshold, args.minor_dilation_kernel)
         cv2.imwrite(str(prediction_dir / f"{sample['stem']}_localization.png"), loc)
         cv2.imwrite(str(prediction_dir / f"{sample['stem']}_damage.png"), damage)
-    summary = {"experiment": "Texas-fine-tuned ImageNet Swin-T + Texas-fine-tuned third-place xView2 soft ensemble",
-               "selection": "Fusion weights and threshold selected only on Texas validation; held-out Texas test evaluated once.",
+    summary = {"experiment": args.experiment_label,
+               "selection": args.selection_label,
+               "selection_objective": objective,
+               "selection_stride": args.selection_stride,
                "selected_parameters": {"swin_localization_weight": alpha, "third_place_localization_weight": 1-alpha,
                                        "swin_damage_weight": beta, "third_place_damage_weight": 1-beta,
-                                       "localization_threshold": threshold},
+                                       "localization_threshold": threshold,
+                                       "minor_dilation_kernel": args.minor_dilation_kernel},
                "validation_samples": len(validation), "test_samples": len(test),
                "validation_third_place_reproduction": preflight, "test_metrics": metrics}
     (args.output_dir / "ensemble_metrics.json").write_text(json.dumps(summary, indent=2) + "\n")
