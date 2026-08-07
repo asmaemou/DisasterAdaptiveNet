@@ -192,6 +192,7 @@ fi
 python -u transformer/scripts/eval_swin_first_place_texas_soft_ensemble.py \
   --swin-root "$SWIN_RAW" --first-place-root "$FIRST_RAW" \
   --first-place-data-root "$COMMON_VIEW" --output-dir "$RESULTS" \
+  --truth-reference targets \
   --expected-val-samples "$VAL_COUNT" --expected-test-samples "$TEST_COUNT" \
   --minimum-first-place-val-loc-f1 0.8 \
   --selection-objective official --minor-dilation-kernel 1 --selection-stride 8 \

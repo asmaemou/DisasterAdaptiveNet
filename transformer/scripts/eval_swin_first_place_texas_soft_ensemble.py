@@ -73,13 +73,19 @@ def strided_samples(samples, stride: int):
     return output
 
 
-def verify_truth_alignment(samples, reference_root: Path, split: str) -> None:
+def verify_truth_alignment(
+    samples, reference_root: Path, split: str, truth_reference: str = "auto"
+) -> None:
     mismatches = []
     for sample in samples:
-        candidates = [
-            reference_root / split / "masks" / f"{sample['stem']}_pre_disaster.png",
-            reference_root / split / "targets" / f"{sample['stem']}_pre_disaster_target.png",
-        ]
+        mask_path = reference_root / split / "masks" / f"{sample['stem']}_pre_disaster.png"
+        target_path = reference_root / split / "targets" / f"{sample['stem']}_pre_disaster_target.png"
+        if truth_reference == "targets":
+            candidates = [target_path]
+        elif truth_reference == "masks":
+            candidates = [mask_path]
+        else:
+            candidates = [mask_path, target_path]
         path = next((candidate for candidate in candidates if candidate.is_file()), candidates[0])
         reference = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
         if reference is None:
@@ -126,6 +132,12 @@ def parse_args():
     parser.add_argument("--experiment-label", default="Texas-fine-tuned ImageNet Swin-T + Texas-fine-tuned first-place xView2 soft ensemble")
     parser.add_argument("--selection-label", default="Fusion weights and localization threshold selected only on Texas validation; Texas test evaluated once.")
     parser.add_argument("--selection-stride", type=int, default=1, help="Deterministic validation-only pixel stride used for fusion-grid selection")
+    parser.add_argument(
+        "--truth-reference",
+        choices=["auto", "masks", "targets"],
+        default="auto",
+        help="Canonical ground-truth files used by the alignment gate",
+    )
     return parser.parse_args()
 
 
@@ -136,7 +148,9 @@ def main():
     validation = fusion.load_split(args.swin_root / "val", args.first_place_root / "val")
     if len(validation) != args.expected_val_samples:
         raise RuntimeError(f"Expected {args.expected_val_samples} validation samples, found {len(validation)}")
-    verify_truth_alignment(validation, args.first_place_data_root, "val")
+    verify_truth_alignment(
+        validation, args.first_place_data_root, "val", args.truth_reference
+    )
     first_place_validation = evaluate(validation, "first_place")
     print(
         "First-place validation preflight:",
@@ -183,7 +197,7 @@ def main():
     test = fusion.load_split(args.swin_root / "test", args.first_place_root / "test")
     if len(test) != args.expected_test_samples:
         raise RuntimeError(f"Expected {args.expected_test_samples} test samples, found {len(test)}")
-    verify_truth_alignment(test, args.first_place_data_root, "test")
+    verify_truth_alignment(test, args.first_place_data_root, "test", args.truth_reference)
     alpha = float(selected["swin_localization_weight"])
     beta = float(selected["swin_damage_weight"])
     threshold = float(selected["localization_threshold"])
