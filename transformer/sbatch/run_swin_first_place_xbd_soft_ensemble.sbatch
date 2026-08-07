@@ -173,9 +173,11 @@ trap - EXIT
 
 cd "$PROJECT_ROOT"
 if python -u transformer/scripts/validate_swin_probability_cache.py \
-     --root "$SWIN_RAW/val" --manifest "$MANIFEST" --split val && \
+     --root "$SWIN_RAW/val" --manifest "$MANIFEST" --split val \
+     --data-root "$COMMON_VIEW" --output-size 1024 && \
    python -u transformer/scripts/validate_swin_probability_cache.py \
-     --root "$SWIN_RAW/test" --manifest "$MANIFEST" --split test; then
+     --root "$SWIN_RAW/test" --manifest "$MANIFEST" --split test \
+     --data-root "$COMMON_VIEW" --output-size 1024; then
   echo "Reusing complete validated xBD Swin probability cache."
 else
   python -u transformer/scripts/export_swin_hrtbda_v5_turkey_probabilities.py \
