@@ -57,6 +57,22 @@ def values(text: str):
     return [float(value) for value in text.split(",")]
 
 
+def strided_samples(samples, stride: int):
+    if stride <= 1:
+        return samples
+    keys = ("h_loc", "f_loc", "loc_true", "damage_true")
+    channel_keys = ("h_damage", "f_damage")
+    output = []
+    for sample in samples:
+        reduced = dict(sample)
+        for key in keys:
+            reduced[key] = sample[key][::stride, ::stride]
+        for key in channel_keys:
+            reduced[key] = sample[key][:, ::stride, ::stride]
+        output.append(reduced)
+    return output
+
+
 def verify_truth_alignment(samples, reference_root: Path, split: str) -> None:
     mismatches = []
     for sample in samples:
@@ -109,6 +125,7 @@ def parse_args():
     parser.add_argument("--minor-dilation-kernel", type=int, default=3)
     parser.add_argument("--experiment-label", default="Texas-fine-tuned ImageNet Swin-T + Texas-fine-tuned first-place xView2 soft ensemble")
     parser.add_argument("--selection-label", default="Fusion weights and localization threshold selected only on Texas validation; Texas test evaluated once.")
+    parser.add_argument("--selection-stride", type=int, default=1, help="Deterministic validation-only pixel stride used for fusion-grid selection")
     return parser.parse_args()
 
 
@@ -133,13 +150,15 @@ def main():
             f"{args.minimum_first_place_val_loc_f1:.6f}; refusing to tune/report fusion"
         )
     rows = []
+    selection_validation = strided_samples(validation, args.selection_stride)
+    print(f"Fusion-grid validation pixel stride: {args.selection_stride}", flush=True)
     for alpha in values(args.alphas):
         for beta in values(args.betas):
             for threshold in values(args.thresholds):
                 rows.append({
                     "swin_localization_weight": alpha, "swin_damage_weight": beta,
                     "localization_threshold": threshold,
-                    **evaluate(validation, "hybrid", alpha, beta, threshold),
+                    **evaluate(selection_validation, "hybrid", alpha, beta, threshold),
                 })
     # Match the metric used by the standalone Texas winner evaluations and in
     # the paper tables: 0.3 * localization F1 + 0.7 * macro damage-class F1.
@@ -185,6 +204,7 @@ def main():
         "experiment": args.experiment_label,
         "selection": args.selection_label,
         "selection_objective": objective,
+        "selection_stride": args.selection_stride,
         "alpha_definition": "Swin localization probability weight",
         "beta_definition": "Swin damage probability weight",
         "selected_parameters": {

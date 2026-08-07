@@ -81,8 +81,10 @@ echo "Acquired exclusive first-place inference workspace lock."
 python -u transformer/scripts/prepare_xbd_first_place_ensemble_view.py \
   --xbd-root "$XBD_ROOT" --output-root "$COMMON_VIEW"
 MANIFEST=$COMMON_VIEW/official_split_manifest.csv
-VAL_COUNT=$(awk -F, 'NR>1 && $2=="val" {n++} END {print n+0}' "$MANIFEST")
-TEST_COUNT=$(awk -F, 'NR>1 && $2=="test" {n++} END {print n+0}' "$MANIFEST")
+VAL_COUNT=$(tr -d '\r' < "$MANIFEST" | awk -F, 'NR>1 && $2=="val" {n++} END {print n+0}')
+TEST_COUNT=$(tr -d '\r' < "$MANIFEST" | awk -F, 'NR>1 && $2=="test" {n++} END {print n+0}')
+test "$VAL_COUNT" -gt 0 || { echo "ERROR: manifest contains zero validation samples"; exit 1; }
+test "$TEST_COUNT" -gt 0 || { echo "ERROR: manifest contains zero test samples"; exit 1; }
 echo "Common samples: hold/val=$VAL_COUNT test=$TEST_COUNT"
 
 python -u transformer/scripts/setup_first_place_xbd_inference_weights.py \
@@ -150,23 +152,30 @@ restore_test_link
 trap - EXIT
 
 cd "$PROJECT_ROOT"
-python -u transformer/scripts/export_swin_hrtbda_v5_turkey_probabilities.py \
-  --phase1-checkpoint "$SWIN_EXPERIMENT/checkpoints/phase1_best.pt" \
-  --phase2-checkpoint "$SWIN_EXPERIMENT/checkpoints/phase2_best.pt" \
-  --data-root "$COMMON_VIEW" --output-root "$SWIN_RAW" \
-  --split-manifest "$MANIFEST" --splits val test \
-  --output-size 1024 --geometry top-left-pad \
-  --num-workers 0 --device cuda --overwrite
+if python -u transformer/scripts/validate_swin_probability_cache.py \
+     --root "$SWIN_RAW/val" --manifest "$MANIFEST" --split val && \
+   python -u transformer/scripts/validate_swin_probability_cache.py \
+     --root "$SWIN_RAW/test" --manifest "$MANIFEST" --split test; then
+  echo "Reusing complete validated xBD Swin probability cache."
+else
+  python -u transformer/scripts/export_swin_hrtbda_v5_turkey_probabilities.py \
+    --phase1-checkpoint "$SWIN_EXPERIMENT/checkpoints/phase1_best.pt" \
+    --phase2-checkpoint "$SWIN_EXPERIMENT/checkpoints/phase2_best.pt" \
+    --data-root "$COMMON_VIEW" --output-root "$SWIN_RAW" \
+    --split-manifest "$MANIFEST" --splits val test \
+    --output-size 1024 --geometry top-left-pad \
+    --num-workers 0 --device cuda --overwrite
+fi
 
 python -u transformer/scripts/eval_swin_first_place_texas_soft_ensemble.py \
   --swin-root "$SWIN_RAW" --first-place-root "$FIRST_RAW" \
   --first-place-data-root "$COMMON_VIEW" --output-dir "$RESULTS" \
   --expected-val-samples "$VAL_COUNT" --expected-test-samples "$TEST_COUNT" \
   --minimum-first-place-val-loc-f1 0.8 \
-  --selection-objective official --minor-dilation-kernel 1 \
-  --alphas 0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1 \
-  --betas 0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1 \
-  --thresholds 0.2,0.3,0.4,0.5,0.6,0.7,0.8 \
+  --selection-objective official --minor-dilation-kernel 1 --selection-stride 8 \
+  --alphas 0,0.25,0.5,0.75,1 \
+  --betas 0,0.25,0.5,0.75,1 \
+  --thresholds 0.3,0.4,0.5,0.6,0.7 \
   --experiment-label "xBD train+tier3 Swin-Tiny + released first-place xView2 xBD soft ensemble" \
   --selection-label "Fusion selected only on xBD hold; untouched xBD test evaluated once."
 
