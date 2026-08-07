@@ -29,6 +29,22 @@ def dilate_minor(damage, loc, kernel_size):
     return output
 
 
+def canonical_damage_truth(localization, damage):
+    """Normalize equivalent xBD ignore encodings used by the two pipelines.
+
+    Swin stores an unclassified building pixel as 255, whereas the legacy
+    second-place preparation can leave it as 0. Both mean "exclude from the
+    four damage-class metrics". Preserve labels 1--4 and represent every
+    other building pixel consistently as 255.
+    """
+    building = localization > 0
+    canonical = np.zeros(damage.shape, dtype=np.uint8)
+    for class_id in range(1, 5):
+        canonical[(damage == class_id) & building] = class_id
+    canonical[building & ~np.isin(damage, [1, 2, 3, 4])] = 255
+    return canonical
+
+
 def load_split(swin_root: Path, second_root: Path):
     samples = []
     swin_files = sorted(swin_root.glob("*.npz"))
@@ -43,7 +59,9 @@ def load_split(swin_root: Path, second_root: Path):
             second_truth = (second["loc_true"] > 0).astype(np.uint8)
             if not np.array_equal(swin_truth, second_truth):
                 raise RuntimeError(f"FAIL-FAST: localization truth mismatch for {swin_path.stem}")
-            if not np.array_equal(swin["damage_true"], second["damage_true"]):
+            swin_damage_truth = canonical_damage_truth(swin_truth, swin["damage_true"])
+            second_damage_truth = canonical_damage_truth(second_truth, second["damage_true"])
+            if not np.array_equal(swin_damage_truth, second_damage_truth):
                 raise RuntimeError(f"FAIL-FAST: damage truth mismatch for {swin_path.stem}")
             samples.append({
                 "stem": swin_path.stem,
@@ -55,7 +73,7 @@ def load_split(swin_root: Path, second_root: Path):
                 "w_loc_prediction": second["loc_prediction"].astype(np.uint8),
                 "w_damage_prediction": second["damage_prediction"].astype(np.uint8),
                 "loc_true": second_truth,
-                "damage_true": second["damage_true"].astype(np.uint8),
+                "damage_true": second_damage_truth,
             })
     print(f"PASS probability/truth alignment: samples={len(samples)}", flush=True)
     return samples

@@ -80,13 +80,22 @@ else
     --use-released-checkpoints
 fi
 
-python -u transformer/scripts/export_swin_hrtbda_v5_turkey_probabilities.py \
-  --phase1-checkpoint "$SWIN_EXPERIMENT/checkpoints/phase1_best.pt" \
-  --phase2-checkpoint "$SWIN_EXPERIMENT/checkpoints/phase2_best.pt" \
-  --data-root "$SWIN_DATA" --output-root "$SWIN_RAW" \
-  --split-manifest "$SECOND_DATA/folds.csv" --splits val test \
-  --output-size 512 --geometry stretch \
-  --num-workers 0 --device cuda --overwrite
+if python -u transformer/scripts/validate_swin_probability_cache.py \
+     --root "$SWIN_RAW/val" --manifest "$SECOND_DATA/folds.csv" --split val \
+     --data-root "$SWIN_DATA" --output-size 512 && \
+   python -u transformer/scripts/validate_swin_probability_cache.py \
+     --root "$SWIN_RAW/test" --manifest "$SECOND_DATA/folds.csv" --split test \
+     --data-root "$SWIN_DATA" --output-size 512; then
+  echo "Reusing complete validated xBD Swin probability cache."
+else
+  python -u transformer/scripts/export_swin_hrtbda_v5_turkey_probabilities.py \
+    --phase1-checkpoint "$SWIN_EXPERIMENT/checkpoints/phase1_best.pt" \
+    --phase2-checkpoint "$SWIN_EXPERIMENT/checkpoints/phase2_best.pt" \
+    --data-root "$SWIN_DATA" --output-root "$SWIN_RAW" \
+    --split-manifest "$SECOND_DATA/folds.csv" --splits val test \
+    --output-size 512 --geometry stretch \
+    --num-workers 0 --device cuda --overwrite
+fi
 
 python -u transformer/scripts/eval_swin_second_place_texas_soft_ensemble.py \
   --swin-root "$SWIN_RAW" --second-place-root "$SECOND_RAW" \
