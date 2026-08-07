@@ -69,14 +69,32 @@ date
 hostname
 nvidia-smi || true
 
-# The released predictors share FIRST_BASE/test and cannot safely run for two
-# datasets at once. Fail immediately instead of silently mixing datasets.
-exec 9>"$FIRST_BASE/.first_place_inference.lock"
-if ! flock -n 9; then
-  echo "ERROR: another first-place xView2 inference job owns the shared legacy workspace."
-  echo "Wait for that job to finish, then resubmit this job."
-  exit 1
-fi
+# The released predictors share FIRST_BASE/test. Use an atomic directory lock;
+# the HPC shared filesystem does not implement POSIX flock locks.
+LOCK_DIR=$FIRST_BASE/.first_place_inference.lockdir
+release_workspace_lock() {
+  rm -f "$LOCK_DIR/job_id"
+  rmdir "$LOCK_DIR" 2>/dev/null || true
+}
+acquire_workspace_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo "$SLURM_JOB_ID" > "$LOCK_DIR/job_id"
+    return 0
+  fi
+  local owner=""
+  owner=$(cat "$LOCK_DIR/job_id" 2>/dev/null || true)
+  if [ -n "$owner" ] && squeue -h -j "$owner" 2>/dev/null | grep -q .; then
+    echo "ERROR: active first-place job $owner owns the shared legacy workspace."
+    return 1
+  fi
+  echo "Removing stale first-place workspace lock (recorded owner: ${owner:-unknown})."
+  rm -f "$LOCK_DIR/job_id"
+  rmdir "$LOCK_DIR" 2>/dev/null || return 1
+  mkdir "$LOCK_DIR"
+  echo "$SLURM_JOB_ID" > "$LOCK_DIR/job_id"
+}
+acquire_workspace_lock || { echo "Wait for the active first-place job, then resubmit."; exit 1; }
+trap release_workspace_lock EXIT
 echo "Acquired exclusive first-place inference workspace lock."
 
 cd "$FIRST_BASE"
@@ -93,6 +111,7 @@ restore_test_link() {
   cd "$FIRST_BASE"
   rm -rf test
   ln -sfn "$FIRST_DATA/test" test
+  release_workspace_lock
 }
 trap restore_test_link EXIT
 
