@@ -90,12 +90,16 @@ def parse_args():
     parser.add_argument("--splits", nargs="+", default=["val", "test"])
     parser.add_argument("--expected-val-samples", type=int, default=45)
     parser.add_argument("--expected-test-samples", type=int, default=46)
+    parser.add_argument("--use-released-checkpoints", action="store_true", help="Use original checkpoint paths from the second-place manifest")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    for path in (args.source_script, args.data_root, args.finetune_root):
+    required_paths = [args.source_script, args.data_root]
+    if not args.use_released_checkpoints:
+        required_paths.append(args.finetune_root)
+    for path in required_paths:
         if not path.exists():
             raise FileNotFoundError(path)
     if not torch.cuda.is_available():
@@ -134,10 +138,11 @@ def main():
     print("Second-place export samples:", {k: len(v) for k, v in samples_by_split.items()}, flush=True)
 
     model_configs = source.read_manifest()
-    model_configs = [
-        config._replace(weight_path=source.find_finetuned_checkpoint(config))
-        for config in model_configs
-    ]
+    if not args.use_released_checkpoints:
+        model_configs = [
+            config._replace(weight_path=source.find_finetuned_checkpoint(config))
+            for config in model_configs
+        ]
     localization_models = [model for model in model_configs if model.task == "localization"]
     damage_models = [model for model in model_configs if model.task == "damage"]
     if len(localization_models) != 6 or len(damage_models) != 15:
@@ -145,7 +150,8 @@ def main():
             f"Expected 6 localization and 15 damage models; got "
             f"{len(localization_models)} and {len(damage_models)}"
         )
-    print("Fine-tuned models: localization=6, damage=15", flush=True)
+    checkpoint_label = "Released xBD" if args.use_released_checkpoints else "Fine-tuned"
+    print(f"{checkpoint_label} models: localization=6, damage=15", flush=True)
 
     loc_sum = {sample["id"]: np.zeros((source.PRED_SIZE, source.PRED_SIZE), np.float32) for sample in all_samples}
     damage_sum = {sample["id"]: np.zeros((5, source.PRED_SIZE, source.PRED_SIZE), np.float32) for sample in all_samples}

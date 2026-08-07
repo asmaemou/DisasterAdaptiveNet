@@ -122,6 +122,20 @@ def grid(text):
     return [float(value) for value in text.split(",")]
 
 
+def strided_samples(samples, stride):
+    if stride <= 1:
+        return samples
+    output = []
+    for sample in samples:
+        reduced = dict(sample)
+        for key in ("s_loc", "w_loc", "w_loc_prediction", "w_damage_prediction", "loc_true", "damage_true"):
+            reduced[key] = sample[key][::stride, ::stride]
+        for key in ("s_damage", "w_damage"):
+            reduced[key] = sample[key][:, ::stride, ::stride]
+        output.append(reduced)
+    return output
+
+
 def save_predictions(samples, output, alpha, beta, threshold, minor_dilation_kernel):
     output.mkdir(parents=True, exist_ok=True)
     for sample in samples:
@@ -145,6 +159,7 @@ def parse_args():
     parser.add_argument("--minor-dilation-kernel", type=int, default=1)
     parser.add_argument("--experiment-label", default="Texas-fine-tuned ImageNet Swin-T + Texas-fine-tuned second-place xView2 soft ensemble")
     parser.add_argument("--selection-label", default="Fusion selected only on Texas validation; held-out Texas test evaluated once.")
+    parser.add_argument("--selection-stride", type=int, default=1)
     return parser.parse_args()
 
 
@@ -154,17 +169,22 @@ def main():
     validation = load_split(args.swin_root / "val", args.second_place_root / "val")
     if len(validation) != args.expected_val_samples:
         raise RuntimeError(f"Expected {args.expected_val_samples} validation samples, found {len(validation)}")
+    selection_validation = strided_samples(validation, args.selection_stride)
+    print(f"Validation calibration/fusion pixel stride: {args.selection_stride}", flush=True)
     calibration_rows = []
     for threshold in grid("0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95"):
         metrics = evaluate(
-            validation, "second_place", threshold=threshold,
+            selection_validation, "second_place", threshold=threshold,
             minor_dilation_kernel=args.minor_dilation_kernel,
         )
         calibration_rows.append({"second_place_localization_threshold": threshold, **metrics})
     calibration_rows.sort(key=lambda row: (row["localization_f1"], row["harmonic_damage_f1"]), reverse=True)
     second_calibration = calibration_rows[0]
     second_threshold = float(second_calibration["second_place_localization_threshold"])
-    second_validation = {key: value for key, value in second_calibration.items() if key != "second_place_localization_threshold"}
+    second_validation = evaluate(
+        validation, "second_place", threshold=second_threshold,
+        minor_dilation_kernel=args.minor_dilation_kernel,
+    )
     with (args.output_dir / "second_place_localization_calibration.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(calibration_rows[0]))
         writer.writeheader(); writer.writerows(calibration_rows)
@@ -185,7 +205,7 @@ def main():
                     "swin_localization_weight": alpha,
                     "swin_damage_weight": beta,
                     "localization_threshold": threshold,
-                    **evaluate(validation, "hybrid", alpha, beta, threshold, args.minor_dilation_kernel),
+                    **evaluate(selection_validation, "hybrid", alpha, beta, threshold, args.minor_dilation_kernel),
                 })
     objective = "harmonic_composite_score" if args.selection_objective == "official" else "macro_composite_score"
     rows.sort(
@@ -216,6 +236,7 @@ def main():
         "experiment": args.experiment_label,
         "selection": args.selection_label,
         "selection_objective": objective,
+        "selection_stride": args.selection_stride,
         "selected_parameters": {
             "swin_localization_weight": alpha,
             "second_place_localization_weight": 1.0 - alpha,
