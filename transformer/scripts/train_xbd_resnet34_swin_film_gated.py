@@ -221,6 +221,14 @@ def make_model(device: torch.device) -> nn.Module:
 
 def focal_dice_damage_loss(logits: torch.Tensor, target: torch.Tensor, weights: torch.Tensor):
     valid = target != 255
+    # Some xBD tiles contain no annotated building pixels. An empty masked
+    # tensor followed by .mean() is NaN. Such tiles still provide valid
+    # localization supervision, so contribute a differentiable zero to the
+    # damage objective instead of being discarded or corrupting training.
+    if not bool(valid.any()):
+        zero = logits.sum() * 0.0
+        return zero, zero
+
     safe = target.clamp(0, 3)
     one_hot = F.one_hot(safe, num_classes=4).permute(0, 3, 1, 2).to(logits.dtype)
     valid4 = valid[:, None].expand_as(one_hot)
@@ -244,7 +252,13 @@ def compute_losses(logits, loc, dmg, loc_criterion, dmg_criterion, device, args)
     damage = dmg_focal + dmg_dice
     total = args.loc_bce_weight * loc_bce + args.loc_dice_weight * loc_dice + args.dmg_ce_weight * damage
     if not torch.isfinite(total):
-        raise FloatingPointError("Non-finite loss detected; stopping before corrupting the checkpoint")
+        raise FloatingPointError(
+            "Non-finite loss detected; stopping before corrupting the checkpoint: "
+            f"loc_bce={float(loc_bce.detach()):.6g}, "
+            f"loc_dice={float(loc_dice.detach()):.6g}, "
+            f"damage_focal={float(dmg_focal.detach()):.6g}, "
+            f"damage_dice={float(dmg_dice.detach()):.6g}"
+        )
     return total, loc_bce, loc_dice, damage
 
 
