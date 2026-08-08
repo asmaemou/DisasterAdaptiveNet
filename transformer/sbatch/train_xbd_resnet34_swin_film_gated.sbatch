@@ -14,13 +14,20 @@ set -euo pipefail
 export PYTHONUNBUFFERED=1
 export HDF5_USE_FILE_LOCKING=FALSE
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-8}
+# Driver 595/CUDA 13.2 on this cluster has been observed opening
+# $HOME/.nv/ComputeCache/index even when CUDA_CACHE_PATH points at node-local
+# storage. On the shared home filesystem that leaves Python blocked in
+# rpc_wait_bit_killable before its first batch. Disable the disk cache for
+# this job; kernels remain cached in-process for the lifetime of training.
+export CUDA_CACHE_DISABLE=1
 
 LOCAL_JOB_TMP=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
 export CUDA_CACHE_PATH=$LOCAL_JOB_TMP/cuda_cache
 export XDG_CACHE_HOME=$LOCAL_JOB_TMP/xdg_cache
 export TORCH_EXTENSIONS_DIR=$LOCAL_JOB_TMP/torch_extensions
+export TORCHINDUCTOR_CACHE_DIR=$LOCAL_JOB_TMP/torchinductor
 export HF_HOME=$LOCAL_JOB_TMP/huggingface
-mkdir -p "$CUDA_CACHE_PATH" "$XDG_CACHE_HOME" "$TORCH_EXTENSIONS_DIR" "$HF_HOME"
+mkdir -p "$CUDA_CACHE_PATH" "$XDG_CACHE_HOME" "$TORCH_EXTENSIONS_DIR" "$TORCHINDUCTOR_CACHE_DIR" "$HF_HOME"
 
 PROJECT_ROOT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
 XBD_ROOT=/homes/j244s673/documents/wsu/phd/xview2
@@ -42,6 +49,8 @@ conda activate disasteradaptivenet_cu128
 echo "===== RESNET34 + SWIN-TINY GATED FUSION + FILM ====="
 echo "Protocol: xBD train+tier3 -> hold selection -> untouched test"
 echo "Output: $OUTPUT_DIR"
+echo "CUDA disk cache disabled: $CUDA_CACHE_DISABLE"
+echo "Job-local runtime cache root: $LOCAL_JOB_TMP"
 date
 hostname
 nvidia-smi
