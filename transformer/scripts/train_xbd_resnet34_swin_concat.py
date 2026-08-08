@@ -69,7 +69,12 @@ def make_model(device: torch.device) -> nn.Module:
 
 
 if __name__ == "__main__":
+    if torch.cuda.is_available():
+        torch.set_autocast_dtype("cuda", torch.bfloat16)
+        print("AMP autocast dtype: bfloat16", flush=True)
     runner.XBDOriginalDataset = hybrid.MultiSplitHazardDataset
     runner.make_model = make_model
     runner.compute_supervised_losses = hybrid.compute_losses
+    runner.aggregate_counts = hybrid.stable_aggregate_counts
+    runner.torch.optim.AdamW = hybrid.ClippedAdamW
     runner.main()

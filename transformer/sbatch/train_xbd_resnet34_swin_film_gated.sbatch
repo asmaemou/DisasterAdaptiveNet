@@ -67,7 +67,7 @@ python -u transformer/scripts/train_xbd_resnet34_swin_film_gated.py \
   --batch-size 2 \
   --num-workers 0 \
   --img-size 896 \
-  --lr 1e-4 \
+  --lr 2e-5 \
   --weight-decay 1e-4 \
   --seed 42 \
   --save-every 5 \

@@ -29,6 +29,41 @@ from utils.models import Res34_Unet_Loc
 
 HAZARDS = ("volcanic", "earthquake", "wildfire", "flood", "storm")
 BASE_XBD_DATASET = runner.XBDOriginalDataset
+BASE_AGGREGATE_COUNTS = runner.aggregate_counts
+BASE_ADAMW = torch.optim.AdamW
+
+
+class ClippedAdamW(BASE_ADAMW):
+    """AdamW with clipping immediately before every real optimizer update.
+
+    GradScaler calls optimizer.step only after unscaling and only when the
+    gradients are finite, so this is the correct location for clipping without
+    modifying the shared legacy training loop.
+    """
+
+    def __init__(self, params, *args, max_grad_norm: float = 1.0, **kwargs):
+        super().__init__(params, *args, **kwargs)
+        self.max_grad_norm = float(max_grad_norm)
+
+    def step(self, closure=None):
+        parameters = [
+            parameter
+            for group in self.param_groups
+            for parameter in group["params"]
+            if parameter.grad is not None
+        ]
+        torch.nn.utils.clip_grad_norm_(parameters, self.max_grad_norm)
+        return super().step(closure=closure)
+
+
+def stable_aggregate_counts(dataset):
+    loc_pos_weight, damage_weights = BASE_AGGREGATE_COUNTS(dataset)
+    # The raw xBD ratio is ~31.9. Combining that with Dice and rare-class focal
+    # supervision creates extreme early gradients in the joint dual-backbone
+    # model. A cap of 10 retains strong imbalance correction without allowing
+    # localization to destabilize every output head.
+    loc_pos_weight = loc_pos_weight.clamp(max=10.0)
+    return loc_pos_weight, damage_weights
 
 
 def hazard_id(stem: str) -> int:
@@ -263,7 +298,14 @@ def compute_losses(logits, loc, dmg, loc_criterion, dmg_criterion, device, args)
 
 
 if __name__ == "__main__":
+    if torch.cuda.is_available():
+        # Blackwell has native BF16. Its FP32-like exponent range avoids the
+        # FP16 overflow observed after step 120 while retaining AMP efficiency.
+        torch.set_autocast_dtype("cuda", torch.bfloat16)
+        print("AMP autocast dtype: bfloat16", flush=True)
     runner.XBDOriginalDataset = MultiSplitHazardDataset
     runner.make_model = make_model
     runner.compute_supervised_losses = compute_losses
+    runner.aggregate_counts = stable_aggregate_counts
+    runner.torch.optim.AdamW = ClippedAdamW
     runner.main()
