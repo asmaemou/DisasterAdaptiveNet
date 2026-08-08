@@ -13,6 +13,14 @@
 set -euo pipefail
 export PYTHONUNBUFFERED=1
 export HDF5_USE_FILE_LOCKING=FALSE
+export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-8}
+
+LOCAL_JOB_TMP=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
+export CUDA_CACHE_PATH=$LOCAL_JOB_TMP/cuda_cache
+export XDG_CACHE_HOME=$LOCAL_JOB_TMP/xdg_cache
+export TORCH_EXTENSIONS_DIR=$LOCAL_JOB_TMP/torch_extensions
+export HF_HOME=$LOCAL_JOB_TMP/huggingface
+mkdir -p "$CUDA_CACHE_PATH" "$XDG_CACHE_HOME" "$TORCH_EXTENSIONS_DIR" "$HF_HOME"
 
 PROJECT_ROOT=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
 XBD_ROOT=/homes/j244s673/documents/wsu/phd/xview2

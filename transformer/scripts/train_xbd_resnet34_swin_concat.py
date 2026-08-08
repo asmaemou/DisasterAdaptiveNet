@@ -16,6 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 import transformer.scripts.train_xbd_supervised_disasteradaptivenet as runner
 import transformer.scripts.train_xbd_resnet34_swin_film_gated as hybrid
@@ -43,17 +44,21 @@ class ResNet34SwinConcatenation(hybrid.ResNet34SwinFiLMGated):
     def forward(self, images: torch.Tensor, condition: torch.Tensor) -> torch.Tensor:
         pre, post = images[:, :3], images[:, 3:]
         size = images.shape[-2:]
+        fusion_size = (max(1, size[0] // 4), max(1, size[1] // 4))
 
         res_pre = self.resnet_unet.forward_once(pre)
         res_post = self.resnet_unet.forward_once(post)
+        res_pre = F.interpolate(res_pre, size=fusion_size, mode="bilinear", align_corners=False)
+        res_post = F.interpolate(res_post, size=fusion_size, mode="bilinear", align_corners=False)
         res_pair = self.res_temporal(self.temporal(res_pre, res_post))
 
-        swin_pre = self.swin_fpn(self.swin(pre), size)
-        swin_post = self.swin_fpn(self.swin(post), size)
+        swin_pre = self.swin_fpn(self.swin(pre), fusion_size)
+        swin_post = self.swin_fpn(self.swin(post), fusion_size)
         swin_pair = self.swin_temporal(self.temporal(swin_pre, swin_post))
 
         fused = self.concat_fusion(torch.cat([res_pair, swin_pair], dim=1))
-        return self.head(fused + self.refine(fused))
+        logits = self.head(fused + self.refine(fused))
+        return F.interpolate(logits, size=size, mode="bilinear", align_corners=False)
 
 
 def make_model(device: torch.device) -> nn.Module:

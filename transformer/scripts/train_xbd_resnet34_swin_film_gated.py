@@ -186,17 +186,28 @@ class ResNet34SwinFiLMGated(nn.Module):
         pre, post = images[:, :3], images[:, 3:]
         size = images.shape[-2:]
 
+        # Perform temporal interaction and cross-backbone fusion at stride 4.
+        # The earlier full-resolution implementation created several
+        # [B, 384, 896, 896] activation graphs and could wait indefinitely in
+        # CUDA/cuDNN with ~25 GB allocated but no active kernels. Predicting at
+        # stride 4 and upsampling only five logits preserves pixel-aligned
+        # segmentation while reducing fusion activation area by 16x.
+        fusion_size = (max(1, size[0] // 4), max(1, size[1] // 4))
+
         res_pre = self.resnet_unet.forward_once(pre)
         res_post = self.res_film(self.resnet_unet.forward_once(post), condition)
+        res_pre = F.interpolate(res_pre, size=fusion_size, mode="bilinear", align_corners=False)
+        res_post = F.interpolate(res_post, size=fusion_size, mode="bilinear", align_corners=False)
         res_pair = self.res_temporal(self.temporal(res_pre, res_post))
 
-        swin_pre = self.swin_fpn(self.swin(pre), size)
-        swin_post = self.swin_film(self.swin_fpn(self.swin(post), size), condition)
+        swin_pre = self.swin_fpn(self.swin(pre), fusion_size)
+        swin_post = self.swin_film(self.swin_fpn(self.swin(post), fusion_size), condition)
         swin_pair = self.swin_temporal(self.temporal(swin_pre, swin_post))
 
         gate = self.gate(torch.cat([res_pair, swin_pair], dim=1))
         fused = gate * swin_pair + (1.0 - gate) * res_pair
-        return self.head(fused + self.refine(fused))
+        logits = self.head(fused + self.refine(fused))
+        return F.interpolate(logits, size=size, mode="bilinear", align_corners=False)
 
 
 def make_model(device: torch.device) -> nn.Module:
