@@ -38,6 +38,8 @@ date
 hostname
 nvidia-smi
 
+# Synchronous loading is intentional on this shared HPC filesystem; prior
+# xBD jobs have blocked inside remote filesystem RPC calls with workers > 0.
 python -u transformer/scripts/train_xbd_resnet34_swin_film_gated.py \
   --xbd-root "$XBD_ROOT" \
   --train-split train+tier3 \
@@ -46,7 +48,7 @@ python -u transformer/scripts/train_xbd_resnet34_swin_film_gated.py \
   --output-dir "$OUTPUT_DIR" \
   --epochs 60 \
   --batch-size 2 \
-  --num-workers 8 \
+  --num-workers 0 \
   --img-size 896 \
   --lr 1e-4 \
   --weight-decay 1e-4 \

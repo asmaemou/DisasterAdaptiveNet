@@ -37,7 +37,9 @@ def hazard_id(stem: str) -> int:
     rules = (
         ("volcanic", ("volcano", "eruption")),
         ("earthquake", ("earthquake", "tsunami")),
-        ("wildfire", ("wildfire", "-fire", "fire-")),
+        # xBD contains both North-American "wildfire"/"fire" names and the
+        # Australian event name "pinery-bushfire". They share one FiLM class.
+        ("wildfire", ("wildfire", "bushfire", "-fire", "fire-")),
         ("flood", ("flood",)),
         ("storm", ("hurricane", "tornado", "cyclone", "typhoon")),
     )
