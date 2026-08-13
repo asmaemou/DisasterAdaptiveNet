@@ -33,6 +33,7 @@ conda activate disasteradaptivenet_cu128
 echo "===== DAMAGE-CLASS CONNECTED-COMPONENT DISTRIBUTION ====="
 echo "Datasets: xBD + five evaluated EBD events"
 echo "Counting all train/validation/test masks; each mask is scanned once."
+echo "Figure: absolute building counts only; broken axis preserves readability."
 echo "Output: $OUTPUT_DIR"
 date
 hostname

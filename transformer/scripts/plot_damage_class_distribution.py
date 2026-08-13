@@ -3,8 +3,8 @@
 
 For each post-disaster target mask, the script counts 8-connected components
 independently for labels 1--4 (no damage, minor, major, destroyed).  It scans
-all requested splits, writes the exact counts to CSV, and creates both absolute
-and normalized stacked-bar panels suitable for a paper.
+all requested splits, writes the exact counts to CSV, and creates a simple
+publication-ready stacked-bar figure of the absolute building counts.
 """
 from __future__ import annotations
 
@@ -24,7 +24,9 @@ import numpy as np
 
 CLASS_LABELS = ("No damage", "Minor damage", "Major damage", "Destroyed")
 CLASS_VALUES = (1, 2, 3, 4)
-COLORS = ("#16B9C7", "#18A64A", "#175AA6", "#ED2B2A")
+# A purpose-built palette distinct from the EBD reference figure.  The colors
+# remain distinguishable when printed and follow increasing visual severity.
+COLORS = ("#4C78A8", "#72B7B2", "#F2A541", "#C44E52")
 MASK_EXTENSIONS = (".png", ".tif", ".tiff", ".bmp")
 
 
@@ -206,11 +208,10 @@ def write_csv(results: Sequence[Dict[str, object]], path: Path) -> None:
 
 
 def plot_distribution(results: Sequence[Dict[str, object]], output_stem: Path) -> None:
-    # Place the largest totals first, as in the EBD reference visualization.
+    # Place the largest datasets first to make their relative scale intuitive.
     ordered = sorted(results, key=lambda item: int(item["total"]), reverse=True)
     names = [str(item["name"]) for item in ordered]
     counts = np.stack([item["counts"] for item in ordered]).astype(np.float64)
-    percentages = np.stack([item["percentages"] for item in ordered]).astype(np.float64)
     totals = counts.sum(axis=1).astype(np.int64)
     y = np.arange(len(names))
 
@@ -225,90 +226,74 @@ def plot_distribution(results: Sequence[Dict[str, object]], output_stem: Path) -
             "ps.fonttype": 42,
         }
     )
-    fig, (absolute_ax, normalized_ax) = plt.subplots(
-        1,
-        2,
-        figsize=(13.2, 5.4),
-        gridspec_kw={"width_ratios": (1.12, 1.0), "wspace": 0.34},
+    # A broken horizontal axis preserves absolute counts while keeping the five
+    # smaller event datasets readable beside the much larger xBD benchmark.
+    largest = int(totals.max())
+    second_largest = int(np.partition(totals, -2)[-2])
+    left_limit = max(1, int(np.ceil(second_largest * 1.18 / 1000.0) * 1000))
+    right_start = max(left_limit, int(np.floor(counts[0, 0] * 0.90 / 1000.0) * 1000))
+
+    fig, (left_ax, right_ax) = plt.subplots(
+        1, 2,
+        sharey=True,
+        figsize=(11.8, 5.6),
+        gridspec_kw={"width_ratios": (1.35, 1.0), "wspace": 0.045},
     )
 
-    left = np.zeros(len(names), dtype=np.float64)
-    for class_index, (label, color) in enumerate(zip(CLASS_LABELS, COLORS)):
-        absolute_ax.barh(
-            y,
-            counts[:, class_index],
-            left=left,
-            color=color,
-            height=0.68,
-            label=label,
-            edgecolor="none",
-        )
-        left += counts[:, class_index]
-    absolute_ax.set_yticks(y, names)
-    absolute_ax.invert_yaxis()
-    absolute_ax.set_xscale("log")
-    absolute_ax.set_xlabel("Connected building components (log scale)")
-    absolute_ax.set_title("(a) Absolute damage-class distribution", loc="left", weight="bold")
-    absolute_ax.grid(axis="x", color="#D9D9D9", linewidth=0.7)
-    absolute_ax.set_axisbelow(True)
-    absolute_ax.spines[["top", "right", "left"]].set_visible(False)
+    for axis in (left_ax, right_ax):
+        cumulative = np.zeros(len(names), dtype=np.float64)
+        for class_index, (label, color) in enumerate(zip(CLASS_LABELS, COLORS)):
+            axis.barh(
+                y, counts[:, class_index], left=cumulative,
+                color=color, height=0.62, label=label,
+                edgecolor="white", linewidth=0.55,
+            )
+            cumulative += counts[:, class_index]
+        axis.grid(axis="x", color="#D8DEE6", linewidth=0.7)
+        axis.set_axisbelow(True)
+        axis.spines[["top", "right", "left"]].set_visible(False)
+        axis.tick_params(axis="y", length=0)
 
-    left = np.zeros(len(names), dtype=np.float64)
-    for class_index, (label, color) in enumerate(zip(CLASS_LABELS, COLORS)):
-        values = percentages[:, class_index]
-        normalized_ax.barh(
-            y,
-            values,
-            left=left,
-            color=color,
-            height=0.68,
-            label=label,
-            edgecolor="white",
-            linewidth=0.35,
-        )
-        for row, value in enumerate(values):
-            if value >= 7.0:
-                normalized_ax.text(
-                    left[row] + value / 2.0,
-                    row,
-                    f"{value:.1f}%",
-                    ha="center",
-                    va="center",
-                    color="white" if class_index in (2, 3) else "#111111",
-                    fontsize=8,
-                    weight="bold",
-                )
-        left += values
+    left_ax.set_yticks(y, names)
+    left_ax.invert_yaxis()
+    left_ax.set_xlim(0, left_limit)
+    right_ax.set_xlim(right_start, int(np.ceil(largest * 1.08 / 1000.0) * 1000))
+    left_ax.spines["right"].set_visible(False)
+    right_ax.spines["left"].set_visible(False)
+    right_ax.tick_params(axis="y", left=False, labelleft=False)
 
-    normalized_ax.set_yticks(y, names)
-    normalized_ax.invert_yaxis()
-    normalized_ax.set_xlim(0, 100)
-    normalized_ax.set_xlabel("Proportion of connected building components (%)")
-    normalized_ax.set_title("(b) Normalized damage-class distribution", loc="left", weight="bold")
-    normalized_ax.grid(axis="x", color="#D9D9D9", linewidth=0.7)
-    normalized_ax.set_axisbelow(True)
-    normalized_ax.spines[["top", "right", "left"]].set_visible(False)
+    # Diagonal marks communicate the skipped interval without changing counts.
+    mark = 0.012
+    slash = dict(color="#444444", clip_on=False, linewidth=1.1)
+    left_ax.plot((1 - mark, 1 + mark), (-mark, +mark), transform=left_ax.transAxes, **slash)
+    left_ax.plot((1 - mark, 1 + mark), (1 - mark, 1 + mark), transform=left_ax.transAxes, **slash)
+    right_ax.plot((-mark, +mark), (-mark, +mark), transform=right_ax.transAxes, **slash)
+    right_ax.plot((-mark, +mark), (1 - mark, 1 + mark), transform=right_ax.transAxes, **slash)
+
+    # Exact dataset totals remove any ambiguity introduced by the broken axis.
     for row, total in enumerate(totals):
-        normalized_ax.text(
-            101.0,
-            row,
-            f"n={total:,}",
-            ha="left",
-            va="center",
-            fontsize=8,
-            clip_on=False,
+        axis = right_ax if total >= right_start else left_ax
+        axis.annotate(
+            f"{total:,}", xy=(total, row), xytext=(7, 0),
+            textcoords="offset points", va="center", ha="left",
+            fontsize=8.5, color="#333333", weight="bold", clip_on=False,
         )
 
-    handles, labels = normalized_ax.get_legend_handles_labels()
+    handles, labels = right_ax.get_legend_handles_labels()
     fig.legend(
         handles,
         labels,
         loc="upper center",
-        bbox_to_anchor=(0.5, 1.015),
+        bbox_to_anchor=(0.5, 0.965),
         ncol=4,
         frameon=False,
     )
-    fig.subplots_adjust(top=0.86, bottom=0.13, left=0.15, right=0.94)
+    fig.suptitle(
+        "Building Damage-Class Distribution Across the Evaluated Datasets",
+        y=1.015, fontsize=14, weight="bold", color="#20242A",
+    )
+    fig.supxlabel("Number of connected building components", y=0.035, fontsize=10.5)
+    fig.subplots_adjust(top=0.83, bottom=0.15, left=0.20, right=0.95)
 
     for suffix, kwargs in (
         (".png", {"dpi": 400}),
@@ -357,7 +342,8 @@ def main() -> None:
     csv_path = args.output_dir / "damage_class_connected_components.csv"
     write_csv(results, csv_path)
     print(f"Wrote counts: {csv_path}", flush=True)
-    plot_distribution(results, args.output_dir / "damage_class_distribution")
+    # Use a new filename so an earlier two-panel figure is preserved.
+    plot_distribution(results, args.output_dir / "building_damage_statistics")
 
 
 if __name__ == "__main__":
