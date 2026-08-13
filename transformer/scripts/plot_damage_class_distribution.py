@@ -26,7 +26,7 @@ CLASS_LABELS = ("No damage", "Minor damage", "Major damage", "Destroyed")
 CLASS_VALUES = (1, 2, 3, 4)
 # A purpose-built palette distinct from the EBD reference figure.  The colors
 # remain distinguishable when printed and follow increasing visual severity.
-COLORS = ("#4C78A8", "#72B7B2", "#F2A541", "#C44E52")
+COLORS = ("#20B2C1", "#18A64A", "#225EA8", "#EF2B2D")
 MASK_EXTENSIONS = (".png", ".tif", ".tiff", ".bmp")
 
 
@@ -208,13 +208,11 @@ def write_csv(results: Sequence[Dict[str, object]], path: Path) -> None:
 
 
 def plot_distribution(results: Sequence[Dict[str, object]], output_stem: Path) -> None:
-    # Place the largest datasets first to make their relative scale intuitive.
+    """Draw only the absolute stacked distribution requested for the paper."""
     ordered = sorted(results, key=lambda item: int(item["total"]), reverse=True)
     names = [str(item["name"]) for item in ordered]
     counts = np.stack([item["counts"] for item in ordered]).astype(np.float64)
-    totals = counts.sum(axis=1).astype(np.int64)
-    overall_counts = counts.sum(axis=0)
-    overall_percentages = overall_counts / overall_counts.sum() * 100.0
+    y = np.arange(len(names))
 
     plt.rcParams.update(
         {
@@ -227,67 +225,40 @@ def plot_distribution(results: Sequence[Dict[str, object]], output_stem: Path) -
             "ps.fonttype": 42,
         }
     )
-    # xBD is more than an order of magnitude larger than every event dataset.
-    # Give it a compact full-scale panel and enlarge the remaining five below.
-    # This avoids a broken axis and keeps every absolute class segment visible.
-    fig, (xbd_ax, events_ax) = plt.subplots(
-        2, 1,
-        figsize=(11.8, 6.6),
-        gridspec_kw={"height_ratios": (1.0, 4.2), "hspace": 0.22},
-    )
+    fig, axis = plt.subplots(figsize=(9.3, 5.8))
+    cumulative = np.zeros(len(names), dtype=np.float64)
+    for class_index, (label, color) in enumerate(zip(CLASS_LABELS, COLORS)):
+        axis.barh(
+            y,
+            counts[:, class_index],
+            left=cumulative,
+            color=color,
+            height=0.68,
+            label=label,
+            edgecolor="none",
+        )
+        cumulative += counts[:, class_index]
 
-    def draw_stacked_bars(axis, panel_counts, panel_names, panel_totals, x_limit):
-        positions = np.arange(len(panel_names))
-        cumulative = np.zeros(len(panel_names), dtype=np.float64)
-        for class_index, (label, color) in enumerate(zip(CLASS_LABELS, COLORS)):
-            axis.barh(
-                positions, panel_counts[:, class_index], left=cumulative,
-                color=color, height=0.62, label=label,
-                edgecolor="white", linewidth=0.55,
-            )
-            cumulative += panel_counts[:, class_index]
-        axis.set_yticks(positions, panel_names)
-        axis.invert_yaxis()
-        axis.set_xlim(0, x_limit)
-        axis.grid(axis="x", color="#D8DEE6", linewidth=0.7)
-        axis.set_axisbelow(True)
-        axis.spines[["top", "right", "left"]].set_visible(False)
-        axis.tick_params(axis="y", length=0)
-        for row, total in enumerate(panel_totals):
-            axis.annotate(
-                f"{int(total):,}", xy=(total, row), xytext=(7, 0),
-                textcoords="offset points", va="center", ha="left",
-                fontsize=8.5, color="#333333", weight="bold", clip_on=False,
-            )
+    axis.set_yticks(y, names)
+    axis.invert_yaxis()
+    axis.set_xscale("log")
+    axis.set_xlabel("Connected building components (log scale)")
+    axis.set_title("Absolute Damage-Class Distribution", loc="left", weight="bold")
+    axis.grid(axis="x", color="#D9D9D9", linewidth=0.7)
+    axis.set_axisbelow(True)
+    axis.spines[["top", "right", "left"]].set_visible(False)
+    axis.tick_params(axis="y", length=0)
 
-    xbd_limit = int(np.ceil(totals[0] * 1.10 / 10000.0) * 10000)
-    event_limit = int(np.ceil(totals[1:].max() * 1.16 / 1000.0) * 1000)
-    draw_stacked_bars(xbd_ax, counts[:1], names[:1], totals[:1], xbd_limit)
-    draw_stacked_bars(events_ax, counts[1:], names[1:], totals[1:], event_limit)
-    xbd_ax.set_xlabel("xBD benchmark — full count scale", fontsize=9, color="#555555")
-    events_ax.set_xlabel("Event datasets — enlarged count scale", fontsize=9, color="#555555")
-
-    handles, _ = xbd_ax.get_legend_handles_labels()
-    legend_labels = [
-        f"{label}: {percentage:.2f}%"
-        for label, percentage in zip(CLASS_LABELS, overall_percentages)
-    ]
+    handles, labels = axis.get_legend_handles_labels()
     fig.legend(
         handles,
-        legend_labels,
+        labels,
         loc="upper center",
-        bbox_to_anchor=(0.5, 0.935),
+        bbox_to_anchor=(0.5, 0.985),
         ncol=4,
         frameon=False,
-        title="Overall distribution across all six datasets",
-        title_fontsize=9,
     )
-    fig.suptitle(
-        "Building Damage-Class Distribution Across the Evaluated Datasets",
-        y=1.015, fontsize=14, weight="bold", color="#20242A",
-    )
-    fig.supxlabel("Number of connected building components", y=0.025, fontsize=10.5)
-    fig.subplots_adjust(top=0.79, bottom=0.12, left=0.20, right=0.94)
+    fig.subplots_adjust(top=0.82, bottom=0.14, left=0.25, right=0.97)
 
     for suffix, kwargs in (
         (".png", {"dpi": 400}),
