@@ -208,11 +208,10 @@ def write_csv(results: Sequence[Dict[str, object]], path: Path) -> None:
 
 
 def plot_distribution(results: Sequence[Dict[str, object]], output_stem: Path) -> None:
-    """Draw only the absolute stacked distribution requested for the paper."""
+    """Draw absolute class-wise building counts as grouped horizontal bars."""
     ordered = sorted(results, key=lambda item: int(item["total"]), reverse=True)
     names = [str(item["name"]) for item in ordered]
     counts = np.stack([item["counts"] for item in ordered]).astype(np.float64)
-    y = np.arange(len(names))
 
     plt.rcParams.update(
         {
@@ -225,26 +224,53 @@ def plot_distribution(results: Sequence[Dict[str, object]], output_stem: Path) -
             "ps.fonttype": 42,
         }
     )
-    fig, axis = plt.subplots(figsize=(9.3, 5.8))
-    cumulative = np.zeros(len(names), dtype=np.float64)
-    for class_index, (label, color) in enumerate(zip(CLASS_LABELS, COLORS)):
-        axis.barh(
-            y,
-            counts[:, class_index],
-            left=cumulative,
-            color=color,
-            height=0.68,
-            label=label,
-            edgecolor="none",
-        )
-        cumulative += counts[:, class_index]
+    fig, axis = plt.subplots(figsize=(10.8, 7.2))
+    group_centers = np.arange(len(names), dtype=np.float64)
+    bar_height = 0.16
+    offsets = np.array([-1.5, -0.5, 0.5, 1.5]) * bar_height
+    positive_counts = counts[counts > 0]
+    x_min = max(1.0, 10.0 ** np.floor(np.log10(positive_counts.min())))
+    x_max = 10.0 ** np.ceil(np.log10(positive_counts.max()))
 
-    axis.set_yticks(y, names)
+    for class_index, (label, color) in enumerate(zip(CLASS_LABELS, COLORS)):
+        values = counts[:, class_index]
+        positions = group_centers + offsets[class_index]
+        visible_values = np.maximum(values, x_min)
+        axis.barh(
+            positions,
+            np.maximum(visible_values - x_min, 0.0),
+            left=x_min,
+            color=color,
+            height=bar_height * 0.86,
+            label=label,
+            edgecolor="white",
+            linewidth=0.4,
+        )
+        for row, value in enumerate(values):
+            axis.annotate(
+                f"{int(value):,}",
+                xy=(visible_values[row], positions[row]),
+                xytext=(5, 0),
+                textcoords="offset points",
+                ha="left",
+                va="center",
+                fontsize=7.6,
+                color="#30343B",
+            )
+
+    axis.set_yticks(group_centers, names)
     axis.invert_yaxis()
     axis.set_xscale("log")
-    axis.set_xlabel("Connected building components (log scale)")
-    axis.set_title("Absolute Damage-Class Distribution", loc="left", weight="bold")
-    axis.grid(axis="x", color="#D9D9D9", linewidth=0.7)
+    axis.set_xlim(x_min, x_max * 1.55)
+    axis.set_xlabel("Number of labeled building components (log scale)")
+    axis.set_title(
+        "Class-Wise Distribution of Building Damage Labels Across Datasets",
+        loc="left",
+        weight="bold",
+        pad=18,
+    )
+    axis.grid(axis="x", which="major", color="#D9D9D9", linewidth=0.75)
+    axis.grid(axis="x", which="minor", color="#ECEFF2", linewidth=0.45)
     axis.set_axisbelow(True)
     axis.spines[["top", "right", "left"]].set_visible(False)
     axis.tick_params(axis="y", length=0)
@@ -258,7 +284,7 @@ def plot_distribution(results: Sequence[Dict[str, object]], output_stem: Path) -
         ncol=4,
         frameon=False,
     )
-    fig.subplots_adjust(top=0.82, bottom=0.14, left=0.25, right=0.97)
+    fig.subplots_adjust(top=0.84, bottom=0.12, left=0.24, right=0.94)
 
     for suffix, kwargs in (
         (".png", {"dpi": 400}),
