@@ -315,31 +315,79 @@ def plot_dataset(examples: Sequence[Example], output_stem: Path) -> None:
             ha="right", va="center", labelpad=8,
         )
     fig.suptitle(f"{examples[0].dataset} Test-Set Qualitative Results", fontsize=15, weight="bold", y=0.995)
-    fig.legend(handles=damage_legend(), loc="lower center", bbox_to_anchor=(0.39, -0.006), ncol=4, frameon=False)
-    fig.legend(handles=error_legend(), loc="lower center", bbox_to_anchor=(0.80, -0.006), ncol=3, frameon=False)
-    fig.subplots_adjust(top=0.93, bottom=0.07, left=0.09, right=0.995, wspace=0.025, hspace=0.10)
+    fig.legend(
+        handles=damage_legend(),
+        title="Damage-severity labels — Ground truth and prediction",
+        loc="lower center", bbox_to_anchor=(0.35, -0.010),
+        ncol=4, frameon=True, fontsize=8.5, title_fontsize=9,
+    )
+    fig.legend(
+        handles=error_legend(),
+        title="Prediction-agreement categories — Error analysis",
+        loc="lower center", bbox_to_anchor=(0.80, -0.010),
+        ncol=3, frameon=True, fontsize=8.5, title_fontsize=9,
+    )
+    fig.subplots_adjust(top=0.93, bottom=0.095, left=0.09, right=0.995, wspace=0.025, hspace=0.10)
     save_figure(fig, output_stem)
 
 
 def plot_overview(all_examples: Dict[str, Sequence[Example]], output_stem: Path) -> None:
     selected = [max(items, key=lambda item: len(np.unique(item.truth[item.truth > 0]))) for items in all_examples.values()]
     columns = ("Pre-disaster", "Post-disaster", "Ground truth", "Prediction", "Error analysis")
-    fig, axes = plt.subplots(len(selected), 5, figsize=(15.0, 2.65 * len(selected)), squeeze=False)
+    # The first, dedicated column contains dataset names.  Keeping names in
+    # their own axes prevents long labels from being clipped by tight_layout or
+    # bbox_inches="tight" when the overview is exported for a paper.
+    fig = plt.figure(figsize=(16.2, 2.70 * len(selected) + 1.35))
+    grid = fig.add_gridspec(
+        len(selected), 6,
+        width_ratios=(0.68, 1, 1, 1, 1, 1),
+        wspace=0.035, hspace=0.09,
+    )
+    axes = np.empty((len(selected), 5), dtype=object)
     for row, example in enumerate(selected):
+        label_axis = fig.add_subplot(grid[row, 0])
+        label_axis.axis("off")
+        label_axis.text(
+            0.96, 0.5, example.dataset,
+            ha="right", va="center", fontsize=10.5, weight="bold",
+            color="#20242A", wrap=True,
+        )
         images = (
             example.pre, example.post, color_overlay(example.post, example.truth),
             color_overlay(example.post, example.prediction), example.correctness,
         )
         for column, image in enumerate(images):
+            axes[row, column] = fig.add_subplot(grid[row, column + 1])
             axes[row, column].imshow(image)
             axes[row, column].axis("off")
             if row == 0:
                 axes[row, column].set_title(columns[column], fontsize=11, weight="bold")
-        axes[row, 0].set_ylabel(example.dataset, fontsize=10, weight="bold", rotation=0, ha="right", va="center", labelpad=8)
-    fig.suptitle("RS-BDNet Qualitative Results Across Six Disaster Datasets", fontsize=15, weight="bold", y=0.995)
-    fig.legend(handles=damage_legend(), loc="lower center", bbox_to_anchor=(0.39, -0.002), ncol=4, frameon=False)
-    fig.legend(handles=error_legend(), loc="lower center", bbox_to_anchor=(0.80, -0.002), ncol=3, frameon=False)
-    fig.subplots_adjust(top=0.95, bottom=0.045, left=0.12, right=0.995, wspace=0.025, hspace=0.09)
+    fig.suptitle(
+        "RS-BDNet Qualitative Results Across Six Disaster Datasets",
+        fontsize=15, weight="bold", y=0.992,
+    )
+
+    severity_legend = fig.legend(
+        handles=damage_legend(),
+        title="Damage-severity labels — Ground truth and prediction",
+        loc="lower center", bbox_to_anchor=(0.35, 0.012),
+        ncol=4, frameon=True, fancybox=True, edgecolor="#D1D5DB",
+        fontsize=8.7, title_fontsize=9.3,
+    )
+    severity_legend.get_frame().set_facecolor("#F8FAFC")
+    severity_legend.get_frame().set_alpha(1.0)
+
+    agreement_legend = fig.legend(
+        handles=error_legend(),
+        title="Prediction-agreement categories — Error analysis",
+        loc="lower center", bbox_to_anchor=(0.77, 0.012),
+        ncol=3, frameon=True, fancybox=True, edgecolor="#D1D5DB",
+        fontsize=8.7, title_fontsize=9.3,
+    )
+    agreement_legend.get_frame().set_facecolor("#F8FAFC")
+    agreement_legend.get_frame().set_alpha(1.0)
+
+    fig.subplots_adjust(top=0.947, bottom=0.105, left=0.025, right=0.995)
     save_figure(fig, output_stem)
 
 
