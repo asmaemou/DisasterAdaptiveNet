@@ -39,16 +39,21 @@ from transformer.scripts.train_xbd_bitemporal_building_crossattention_ordinal im
 CLASS_NAMES = ("No damage", "Minor damage", "Major damage", "Destroyed")
 CLASS_COLORS = np.array(
     [
-        [50, 170, 205],   # blue-cyan
-        [70, 180, 105],   # green
-        [245, 166, 35],   # amber
-        [211, 70, 70],    # red
+        [45, 156, 219],   # blue: no damage
+        [242, 201, 76],   # yellow: minor damage
+        [242, 153, 74],   # orange: major damage
+        [214, 40, 40],    # red: destroyed
     ],
     dtype=np.uint8,
 )
 ERROR_NAMES = ("Correct", "Wrong severity", "Missed building", "False building")
 ERROR_COLORS = np.array(
-    [[55, 170, 95], [214, 65, 65], [244, 158, 45], [65, 125, 210]],
+    [
+        [0, 168, 120],    # teal: correct
+        [111, 45, 189],   # purple: wrong severity
+        [245, 245, 245],  # white: missed building
+        [255, 78, 174],   # pink: false building
+    ],
     dtype=np.uint8,
 )
 
@@ -212,7 +217,9 @@ def color_overlay(image: np.ndarray, labels: np.ndarray, alpha: float = 0.58) ->
 
 
 def correctness_map(truth: np.ndarray, prediction: np.ndarray) -> np.ndarray:
-    result = np.full((*truth.shape, 3), 244, dtype=np.uint8)
+    # Black is reserved exclusively for pixels where neither truth nor the
+    # model identifies a building.
+    result = np.zeros((*truth.shape, 3), dtype=np.uint8)
     true_building = truth > 0
     pred_building = prediction > 0
     result[true_building & pred_building & (truth == prediction)] = ERROR_COLORS[0]
@@ -274,7 +281,12 @@ def damage_legend():
 
 
 def error_legend():
-    return [Patch(facecolor=color / 255.0, label=name) for name, color in zip(ERROR_NAMES, ERROR_COLORS)]
+    handles = [
+        Patch(facecolor=color / 255.0, label=name, edgecolor="#9CA3AF" if name == "Missed building" else "none")
+        for name, color in zip(ERROR_NAMES, ERROR_COLORS)
+    ]
+    handles.append(Patch(facecolor="black", label="No-building area"))
+    return handles
 
 
 def save_figure(fig, stem: Path) -> None:
@@ -299,12 +311,12 @@ def plot_dataset(examples: Sequence[Example], output_stem: Path) -> None:
             if row == 0:
                 axes[row, column].set_title(columns[column], fontsize=11, weight="bold")
         axes[row, 0].set_ylabel(
-            f"{example.reason}\n{example.stem}", fontsize=8.2, rotation=0,
+            f"Test example {row + 1}\n{example.stem}", fontsize=8.2, rotation=0,
             ha="right", va="center", labelpad=8,
         )
     fig.suptitle(f"{examples[0].dataset} Test-Set Qualitative Results", fontsize=15, weight="bold", y=0.995)
     fig.legend(handles=damage_legend(), loc="lower center", bbox_to_anchor=(0.39, -0.006), ncol=4, frameon=False)
-    fig.legend(handles=error_legend(), loc="lower center", bbox_to_anchor=(0.80, -0.006), ncol=2, frameon=False)
+    fig.legend(handles=error_legend(), loc="lower center", bbox_to_anchor=(0.80, -0.006), ncol=3, frameon=False)
     fig.subplots_adjust(top=0.93, bottom=0.07, left=0.09, right=0.995, wspace=0.025, hspace=0.10)
     save_figure(fig, output_stem)
 
@@ -326,7 +338,7 @@ def plot_overview(all_examples: Dict[str, Sequence[Example]], output_stem: Path)
         axes[row, 0].set_ylabel(example.dataset, fontsize=10, weight="bold", rotation=0, ha="right", va="center", labelpad=8)
     fig.suptitle("RS-BDNet Qualitative Results Across Six Disaster Datasets", fontsize=15, weight="bold", y=0.995)
     fig.legend(handles=damage_legend(), loc="lower center", bbox_to_anchor=(0.39, -0.002), ncol=4, frameon=False)
-    fig.legend(handles=error_legend(), loc="lower center", bbox_to_anchor=(0.80, -0.002), ncol=2, frameon=False)
+    fig.legend(handles=error_legend(), loc="lower center", bbox_to_anchor=(0.80, -0.002), ncol=3, frameon=False)
     fig.subplots_adjust(top=0.95, bottom=0.045, left=0.12, right=0.995, wspace=0.025, hspace=0.09)
     save_figure(fig, output_stem)
 
