@@ -57,6 +57,15 @@ ERROR_COLORS = np.array(
     dtype=np.uint8,
 )
 
+# Increase this single value if text is still too small after the exported
+# figure is placed at full text width in the manuscript.
+FONT_SCALE = 1.55
+
+
+def fs(size: float) -> float:
+    """Return a consistently scaled, paper-ready Matplotlib font size."""
+    return size * FONT_SCALE
+
 
 @dataclass(frozen=True)
 class DatasetSpec:
@@ -299,7 +308,11 @@ def save_figure(fig, stem: Path) -> None:
 
 def plot_dataset(examples: Sequence[Example], output_stem: Path) -> None:
     columns = ("Pre-disaster", "Post-disaster", "Ground truth", "Prediction", "Error analysis")
-    fig, axes = plt.subplots(len(examples), 5, figsize=(15.2, 3.0 * len(examples)), squeeze=False)
+    fig, axes = plt.subplots(
+        len(examples), 5,
+        figsize=(17.2, 3.35 * len(examples) + 1.0),
+        squeeze=False,
+    )
     for row, example in enumerate(examples):
         images = (
             example.pre, example.post, color_overlay(example.post, example.truth),
@@ -309,25 +322,43 @@ def plot_dataset(examples: Sequence[Example], output_stem: Path) -> None:
             axes[row, column].imshow(image)
             axes[row, column].axis("off")
             if row == 0:
-                axes[row, column].set_title(columns[column], fontsize=11, weight="bold")
+                axes[row, column].set_title(
+                    columns[column], fontsize=fs(11), weight="bold", pad=8
+                )
         axes[row, 0].set_ylabel(
-            f"Test example {row + 1}\n{example.stem}", fontsize=8.2, rotation=0,
+            f"Test example {row + 1}\n{example.stem}", fontsize=fs(8.2), rotation=0,
             ha="right", va="center", labelpad=8,
         )
-    fig.suptitle(f"{examples[0].dataset} Test-Set Qualitative Results", fontsize=15, weight="bold", y=0.995)
-    fig.legend(
+    fig.suptitle(
+        f"{examples[0].dataset} Test-Set Qualitative Results",
+        fontsize=fs(15), weight="bold", y=0.995,
+    )
+    severity_legend = fig.legend(
         handles=damage_legend(),
         title="Damage-severity labels — Ground truth and prediction",
-        loc="lower center", bbox_to_anchor=(0.35, -0.010),
-        ncol=4, frameon=True, fontsize=8.5, title_fontsize=9,
+        loc="lower center", bbox_to_anchor=(0.34, 0.012),
+        ncol=2, frameon=True, fancybox=True, edgecolor="#D1D5DB",
+        fontsize=fs(8.5), title_fontsize=fs(9),
+        handlelength=1.8, columnspacing=1.6, labelspacing=0.7,
     )
-    fig.legend(
+    severity_legend.get_frame().set_facecolor("#F8FAFC")
+    severity_legend.get_frame().set_alpha(1.0)
+
+    agreement_legend = fig.legend(
         handles=error_legend(),
         title="Prediction-agreement categories — Error analysis",
-        loc="lower center", bbox_to_anchor=(0.80, -0.010),
-        ncol=3, frameon=True, fontsize=8.5, title_fontsize=9,
+        loc="lower center", bbox_to_anchor=(0.78, 0.012),
+        ncol=3, frameon=True, fancybox=True, edgecolor="#D1D5DB",
+        fontsize=fs(8.5), title_fontsize=fs(9),
+        handlelength=1.8, columnspacing=1.4, labelspacing=0.7,
     )
-    fig.subplots_adjust(top=0.93, bottom=0.095, left=0.09, right=0.995, wspace=0.025, hspace=0.10)
+    agreement_legend.get_frame().set_facecolor("#F8FAFC")
+    agreement_legend.get_frame().set_alpha(1.0)
+
+    fig.subplots_adjust(
+        top=0.91, bottom=0.16, left=0.12, right=0.995,
+        wspace=0.025, hspace=0.10,
+    )
     save_figure(fig, output_stem)
 
 
@@ -337,7 +368,7 @@ def plot_overview(all_examples: Dict[str, Sequence[Example]], output_stem: Path)
     # The first, dedicated column contains dataset names.  Keeping names in
     # their own axes prevents long labels from being clipped by tight_layout or
     # bbox_inches="tight" when the overview is exported for a paper.
-    fig = plt.figure(figsize=(16.2, 2.70 * len(selected) + 1.35))
+    fig = plt.figure(figsize=(18.5, 2.90 * len(selected) + 2.0))
     grid = fig.add_gridspec(
         len(selected), 6,
         width_ratios=(0.68, 1, 1, 1, 1, 1),
@@ -349,7 +380,7 @@ def plot_overview(all_examples: Dict[str, Sequence[Example]], output_stem: Path)
         label_axis.axis("off")
         label_axis.text(
             0.96, 0.5, example.dataset,
-            ha="right", va="center", fontsize=10.5, weight="bold",
+            ha="right", va="center", fontsize=fs(10.5), weight="bold",
             color="#20242A", wrap=True,
         )
         images = (
@@ -361,18 +392,21 @@ def plot_overview(all_examples: Dict[str, Sequence[Example]], output_stem: Path)
             axes[row, column].imshow(image)
             axes[row, column].axis("off")
             if row == 0:
-                axes[row, column].set_title(columns[column], fontsize=11, weight="bold")
+                axes[row, column].set_title(
+                    columns[column], fontsize=fs(11), weight="bold", pad=8
+                )
     fig.suptitle(
         "RS-BDNet Qualitative Results Across Six Disaster Datasets",
-        fontsize=15, weight="bold", y=0.992,
+        fontsize=fs(15), weight="bold", y=0.992,
     )
 
     severity_legend = fig.legend(
         handles=damage_legend(),
         title="Damage-severity labels — Ground truth and prediction",
-        loc="lower center", bbox_to_anchor=(0.35, 0.012),
-        ncol=4, frameon=True, fancybox=True, edgecolor="#D1D5DB",
-        fontsize=8.7, title_fontsize=9.3,
+        loc="lower center", bbox_to_anchor=(0.34, 0.012),
+        ncol=2, frameon=True, fancybox=True, edgecolor="#D1D5DB",
+        fontsize=fs(8.7), title_fontsize=fs(9.3),
+        handlelength=1.8, columnspacing=1.8, labelspacing=0.7,
     )
     severity_legend.get_frame().set_facecolor("#F8FAFC")
     severity_legend.get_frame().set_alpha(1.0)
@@ -380,14 +414,22 @@ def plot_overview(all_examples: Dict[str, Sequence[Example]], output_stem: Path)
     agreement_legend = fig.legend(
         handles=error_legend(),
         title="Prediction-agreement categories — Error analysis",
-        loc="lower center", bbox_to_anchor=(0.77, 0.012),
-        ncol=3, frameon=True, fancybox=True, edgecolor="#D1D5DB",
-        fontsize=8.7, title_fontsize=9.3,
+        loc="lower center",
+        bbox_to_anchor=(0.77, 0.012),
+        ncol=3,
+        frameon=True,
+        fancybox=True,
+        edgecolor="#D1D5DB",
+        fontsize=fs(8.7),
+        title_fontsize=fs(9.3),
+        handlelength=1.8,
+        columnspacing=1.5,
+        labelspacing=0.7,
     )
     agreement_legend.get_frame().set_facecolor("#F8FAFC")
     agreement_legend.get_frame().set_alpha(1.0)
 
-    fig.subplots_adjust(top=0.947, bottom=0.105, left=0.025, right=0.995)
+    fig.subplots_adjust(top=0.93, bottom=0.17, left=0.025, right=0.995)
     save_figure(fig, output_stem)
 
 
