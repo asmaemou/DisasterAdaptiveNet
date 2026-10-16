@@ -1,0 +1,80 @@
+<mxfile host="app.diagrams.net" modified="2026-10-15T00:00:00.000Z" agent="Codex" version="24.7.17">
+  <diagram id="rsbdnet-gray-two-row" name="RS-BDNet Two-Row Grayscale">
+    <mxGraphModel dx="1700" dy="850" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="title" value="&lt;b&gt;RS-BDNet: End-to-End Building Damage Assessment&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Arial;fontSize=28;fontColor=#202124;" vertex="1" parent="1">
+          <mxGeometry x="400" y="20" width="900" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- FIRST ROW: INPUTS, FEATURE EXTRACTION, COMPARISON, AND FUSION -->
+        <mxCell id="pre" value="&lt;b&gt;Pre-Disaster&lt;/b&gt;&lt;br&gt;&lt;b&gt;RGB Image&lt;/b&gt;" style="rounded=1;arcSize=15;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#666666;strokeWidth=2;fontFamily=Arial;fontSize=19;fontColor=#202124;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="45" y="105" width="220" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="post" value="&lt;b&gt;Post-Disaster&lt;/b&gt;&lt;br&gt;&lt;b&gt;RGB Image&lt;/b&gt;" style="rounded=1;arcSize=15;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#666666;strokeWidth=2;fontFamily=Arial;fontSize=19;fontColor=#202124;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="45" y="245" width="220" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="resnet" value="Shared Siamese&lt;br&gt;&lt;b&gt;ResNet-34 U-Net&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#4D4D4D&quot;&gt;Local spatial features&lt;/font&gt;" style="rounded=1;arcSize=15;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;strokeWidth=2;fontFamily=Arial;fontSize=18;fontColor=#202124;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="360" y="80" width="285" height="125" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="swin" value="Shared Siamese&lt;br&gt;&lt;b&gt;Swin-Tiny Transformer&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#4D4D4D&quot;&gt;Global contextual features&lt;/font&gt;" style="rounded=1;arcSize=15;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;strokeWidth=2;fontFamily=Arial;fontSize=18;fontColor=#202124;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="360" y="235" width="285" height="125" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="attention" value="Bi-Temporal&lt;br&gt;&lt;b&gt;Cross-Attention&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#4D4D4D&quot;&gt;Compare pre/post features&lt;/font&gt;" style="rounded=1;arcSize=15;whiteSpace=wrap;html=1;fillColor=#EDEDED;strokeColor=#666666;strokeWidth=2;fontFamily=Arial;fontSize=18;fontColor=#202124;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="755" y="155" width="270" height="135" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="fusion" value="&lt;b&gt;CNN–Transformer Feature Fusion&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#4D4D4D&quot;&gt;Combined local and global&lt;br&gt;change features&lt;/font&gt;" style="rounded=1;arcSize=15;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;strokeWidth=2;fontFamily=Arial;fontSize=18;fontColor=#202124;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1135" y="155" width="330" height="135" as="geometry"/>
+        </mxCell>
+
+        <!-- SECOND ROW: PREDICTION HEADS AND OUTPUTS -->
+        <mxCell id="locmask" value="&lt;b&gt;Building&lt;br&gt;Localization Mask&lt;/b&gt;" style="rounded=1;arcSize=15;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;strokeWidth=2;fontFamily=Arial;fontSize=18;fontColor=#202124;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="45" y="535" width="230" height="110" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="localization" value="&lt;b&gt;Building Localization Head&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#4D4D4D&quot;&gt;Predicts the building mask&lt;/font&gt;" style="rounded=1;arcSize=15;whiteSpace=wrap;html=1;fillColor=#EDEDED;strokeColor=#666666;strokeWidth=2;fontFamily=Arial;fontSize=18;fontColor=#202124;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="350" y="505" width="320" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="damage" value="&lt;b&gt;Building-Guided Damage Head&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#4D4D4D&quot;&gt;Localization guides severity prediction&lt;/font&gt;" style="rounded=1;arcSize=15;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;strokeWidth=2;fontFamily=Arial;fontSize=18;fontColor=#202124;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="790" y="505" width="365" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="ordinal" value="&lt;b&gt;Auxiliary Ordinal Learning&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#4D4D4D&quot;&gt;Ordered severity supervision&lt;br&gt;(training only)&lt;/font&gt;" style="rounded=1;arcSize=15;whiteSpace=wrap;html=1;fillColor=#F7F7F7;strokeColor=#777777;strokeWidth=2;dashed=1;dashPattern=6 4;fontFamily=Arial;fontSize=16;fontColor=#202124;align=center;verticalAlign=middle;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="825" y="680" width="295" height="95" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="final" value="&lt;b&gt;Final Building Damage Map&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#4D4D4D&quot;&gt;No Damage | Minor | Major | Destroyed&lt;/font&gt;" style="rounded=1;arcSize=15;whiteSpace=wrap;html=1;fillColor=#DEDEDE;strokeColor=#555555;strokeWidth=2;fontFamily=Arial;fontSize=19;fontColor=#202124;align=center;verticalAlign=middle;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="515" width="365" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- FIRST-ROW CONNECTIONS -->
+        <mxCell id="pre_res" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#555555;strokeWidth=2.5;endArrow=block;endFill=1;exitX=1;exitY=0.35;entryX=0;entryY=0.35;" edge="1" parent="1" source="pre" target="resnet"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="post_res" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#555555;strokeWidth=2.5;endArrow=block;endFill=1;exitX=1;exitY=0.35;entryX=0;entryY=0.70;" edge="1" parent="1" source="post" target="resnet"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="pre_swin" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#555555;strokeWidth=2.5;endArrow=block;endFill=1;exitX=1;exitY=0.65;entryX=0;entryY=0.30;" edge="1" parent="1" source="pre" target="swin"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="post_swin" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#555555;strokeWidth=2.5;endArrow=block;endFill=1;exitX=1;exitY=0.65;entryX=0;entryY=0.70;" edge="1" parent="1" source="post" target="swin"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="res_attn" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#555555;strokeWidth=2.5;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.30;" edge="1" parent="1" source="resnet" target="attention"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="swin_attn" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#555555;strokeWidth=2.5;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.70;" edge="1" parent="1" source="swin" target="attention"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="attn_fusion" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#555555;strokeWidth=2.5;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="attention" target="fusion"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- CONNECTION FROM FIRST ROW TO SECOND ROW -->
+        <mxCell id="fusion_loc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#555555;strokeWidth=2.5;endArrow=block;endFill=1;exitX=0.30;exitY=1;entryX=0.70;entryY=0;" edge="1" parent="1" source="fusion" target="localization"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fusion_damage" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#555555;strokeWidth=2.5;endArrow=block;endFill=1;exitX=0.65;exitY=1;entryX=0.70;entryY=0;" edge="1" parent="1" source="fusion" target="damage"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- SECOND-ROW CONNECTIONS -->
+        <mxCell id="loc_mask" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#555555;strokeWidth=2.5;endArrow=block;endFill=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="localization" target="locmask"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="guidance" value="&lt;b&gt;Building guidance&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#555555;strokeWidth=2.5;endArrow=block;endFill=1;fontFamily=Arial;fontSize=15;fontColor=#202124;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="localization" target="damage"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="damage_ordinal" value="Training guidance" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#777777;strokeWidth=2;dashed=1;dashPattern=6 4;endArrow=block;endFill=1;fontFamily=Arial;fontSize=14;fontColor=#333333;labelBackgroundColor=#FFFFFF;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="damage" target="ordinal"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="damage_final" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#555555;strokeWidth=2.5;endArrow=block;endFill=1;exitX=1;exitY=0.45;entryX=0;entryY=0.35;" edge="1" parent="1" source="damage" target="final"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="mask_final" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#555555;strokeWidth=2.5;endArrow=block;endFill=1;exitX=0.5;exitY=1;entryX=0.25;entryY=1;" edge="1" parent="1" source="locmask" target="final"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="160" y="810"/><mxPoint x="1370" y="810"/></Array></mxGeometry></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
