@@ -35,16 +35,22 @@ ABLATIONS = (
 )
 
 
-def _consume_ablation_argument() -> str:
+def _consume_ablation_arguments() -> tuple[str, str]:
     """Read our argument and leave the shared runner's arguments untouched."""
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--ablation", choices=ABLATIONS, required=True)
+    parser.add_argument(
+        "--dataset-loader",
+        choices=("xbd_multisplit", "standard"),
+        default="xbd_multisplit",
+        help="Use standard for event-specific pre-split datasets.",
+    )
     args, remaining = parser.parse_known_args()
     sys.argv = [sys.argv[0], *remaining]
-    return str(args.ablation)
+    return str(args.ablation), str(args.dataset_loader)
 
 
-ABLATION = _consume_ablation_argument()
+ABLATION, DATASET_LOADER = _consume_ablation_arguments()
 
 
 class IdentityPair(nn.Module):
@@ -233,7 +239,12 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
         torch.set_autocast_dtype("cuda", torch.bfloat16)
         print("AMP autocast dtype: bfloat16", flush=True)
-    runner.XBDOriginalDataset = stable.MultiSplitHazardDataset
+    if DATASET_LOADER == "xbd_multisplit":
+        runner.XBDOriginalDataset = stable.MultiSplitHazardDataset
+    else:
+        # Event-specific EBD datasets already contain train/val/test folders.
+        # Their condition IDs are irrelevant because RS-BDNet is hazard-agnostic.
+        runner.XBDOriginalDataset = stable.BASE_XBD_DATASET
     runner.make_model = make_model
     runner.compute_supervised_losses = compute_losses
     runner.aggregate_counts = stable.stable_aggregate_counts

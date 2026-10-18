@@ -16,6 +16,16 @@ ABLATION_JOB_ID=${ABLATION_JOB_ID:?Submit with --export=ALL,ABLATION_JOB_ID=<job
 
 cd "$PROJECT_ROOT"
 
+if [ -x "$HOME/miniforge3/bin/conda" ]; then
+  CONDA_EXE="$HOME/miniforge3/bin/conda"
+elif [ -x "$HOME/miniforge/bin/conda" ]; then
+  CONDA_EXE="$HOME/miniforge/bin/conda"
+else
+  CONDA_EXE="$(command -v conda)"
+fi
+eval "$("$CONDA_EXE" shell.bash hook)"
+conda activate disasteradaptivenet_cu128
+
 python -u transformer/scripts/collect_rsbdnet_ablation_results.py \
   --project-root "$PROJECT_ROOT" \
   --job-id "$ABLATION_JOB_ID"
