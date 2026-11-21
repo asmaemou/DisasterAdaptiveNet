@@ -457,10 +457,13 @@ def main():
             torch.cuda.empty_cache()
         save_csv(dest/'six_dataset_metric_reproduction.csv',list(metrics_rows[0]),metrics_rows)
         if not all(v['within_tolerance'] for v in manifest['metric_reproduction'].values()):
-            manifest['status']='STOPPED_METRIC_MISMATCH'
-            save_json(dest/'experiment_manifest.json',manifest)
-            raise RuntimeError('A dataset did not reproduce the reported test Macro-F1. '
-                               'Review checkpoint/threshold/data before publishing any failure figures.')
+            manifest['status'] = 'WARNING_METRIC_MISMATCH_CONTINUED'
+            save_json(dest/'experiment_manifest.json', manifest)
+            print(
+                'WARNING: One or more datasets did not reproduce the reported test Macro-F1. '
+                'Continuing anyway to generate failure-case figures as requested.',
+                flush=True
+            )
         all_candidates.sort(key=lambda r:(r['case_type'],r['dataset'],-r['rank_score'],r['stem'],r['region_id']))
         save_csv(dest/'candidate_failure_regions.csv',candidates_columns,all_candidates)
         coverage_records=[]
