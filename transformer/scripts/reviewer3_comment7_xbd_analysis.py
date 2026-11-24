@@ -63,6 +63,14 @@ def write_csv(path, rows, columns):
         writer.writerows(rows)
 
 
+def fmt_percent(value, decimals=3, signed=False):
+    # Small smoke-test subsets may contain zero eligible polygons or pixels.
+    # Do not use a float format specifier on None (undefined rate).
+    if value is None:
+        return 'N/A (zero denominator)'
+    return f'{value:+.{decimals}f}%' if signed else f'{value:.{decimals}f}%'
+
+
 def numeric(value):
     try:
         return float(value)
@@ -388,7 +396,15 @@ def main():
     for kind in ('full', 'no_cross_attention'):
         model, threshold, meta = load_model(kind, Path(checkpoints[kind]), device, torch)
         model_meta[kind] = meta
-        stats = Counter()
+        # Initialize EVERY key: Counter returns 0 when accessed but dict(Counter)
+        # omits untouched keys.  A smoke-test image can have no no-damage polygons.
+        stats = Counter({k: 0 for k in (
+            'gt_undamaged_pixels', 'no_damage_tp', 'no_damage_fn',
+            'pixel_damage_fp', 'pixel_missed_localization',
+            'undamaged_polygons_total', 'polygons_no_valid_gt_pixels',
+            'eligible_polygons', 'missed_buildings', 'detected_buildings',
+            'building_damage_fp',
+        )})
         start = time.monotonic()
         folder = export_maps_dir / kind
         folder.mkdir(parents=True, exist_ok=True)
@@ -660,9 +676,11 @@ def main():
     for kind in ('full', 'no_cross_attention'):
         s = report['stats'][kind]
         md.append(f'| {kind} | {s["eligible_polygons"]:,} | {s["building_damage_fp"]:,} | '
-                  f'{s["building_fp_rate_percent"]:.3f}% | {s["gt_undamaged_pixels"]:,} | '
-                  f'{s["pixel_damage_fp_rate_percent"]:.3f}% |')
-    md.extend(['', f'**No-cross minus full FPR:** {report["difference_no_ca_minus_full_percentage_points"]:+.3f} percentage points.', '',
+                  f'{fmt_percent(s["building_fp_rate_percent"])} | {s["gt_undamaged_pixels"]:,} | '
+                  f'{fmt_percent(s["pixel_damage_fp_rate_percent"])} |')
+    difference = report['difference_no_ca_minus_full_percentage_points']
+    difference_text = f'{difference:+.3f} percentage points' if difference is not None else 'N/A (zero denominator)'
+    md.extend(['', f'**No-cross minus full FPR:** {difference_text}.', '',
                '## Manual visual review',
                f'- Candidate cases in worksheet: **{len(selected)}**',
                f'- Cases marked Yes/No by human reviewer: **{len(reviewed)}**',
@@ -674,7 +692,7 @@ def main():
             s = report['stats'][kind]
             md.append(f'- {kind}: **{s["visual_yes_false_positive"]}/{s["visual_yes_scorable"]}** '
                       f'false positives among verified visually changed, scorable cases '
-                      f'({s["visual_yes_fp_rate_percent"]:.2f}%).')
+                      f'({fmt_percent(s["visual_yes_fp_rate_percent"], decimals=2)}).')
     else:
         md.append('- **Visual-change false-positive rates PENDING** until the worksheet Yes/No fields are completed.')
     md.extend(['', '## Important qualifications',
@@ -685,7 +703,7 @@ def main():
     (out / 'comment7_results_summary.md').write_text('\n'.join(md) + '\n')
 
     make_example_figures(out, review, samples, predictions_for_examples, Image, ImageDraw, np)
-    say(f'FINAL: full building FPR={full_fpr:.3f}% ; no-cross FPR={no_fpr:.3f}%')
+    say(f'FINAL: full building FPR={fmt_percent(full_fpr)} ; no-cross FPR={fmt_percent(no_fpr)}')
     say(f'OUTPUT: {out / "comment7_results_summary.md"}')
     say(f'OUTPUT: {out / "all_undamaged_building_predictions.csv"}')
     say(f'OUTPUT: {out / "manual_review_cases_with_predictions.csv"}')
