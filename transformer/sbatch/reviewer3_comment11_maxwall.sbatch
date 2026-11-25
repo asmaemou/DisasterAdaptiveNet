@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:rtx_pro_6000:1
-#SBATCH --time=56-00:00:00
+#SBATCH --time=53-00:00:00
 #SBATCH --job-name=reviewer3_comment11
 #SBATCH --output=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/transformer/sbatch/logs/reviewer3_comment11_%j.out
 #SBATCH --error=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet/transformer/sbatch/logs/reviewer3_comment11_%j.err
