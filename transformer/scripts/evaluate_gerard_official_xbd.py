@@ -133,7 +133,7 @@ def evaluate(samples, checkpoint_path: Path, size: int, max_pairs: int):
         return original(*args, **kwargs)
     models.torchvision.models.resnet34 = resnet34_no_download
     try:
-        cfg = SimpleNamespace(MODEL=SimpleNamespace(OUT_CHANNELS=5))
+        cfg = SimpleNamespace(MODEL=SimpleNamespace(TYPE="strongbaseline", OUT_CHANNELS=5))
         net = models.create_network(cfg)  # DataParallel, same 'module.' key prefix as training
     finally:
         models.torchvision.models.resnet34 = original
