@@ -32,7 +32,20 @@ if [ -e "$RUN_OUTPUT_DIR" ]; then
     exit 1
 fi
 mkdir -p "$RUN_SCRIPT_DIR"
+# Activate Conda BEFORE running Python
+if [ -x "$HOME/miniforge3/bin/conda" ]; then
+    CONDA_EXE="$HOME/miniforge3/bin/conda"
+elif [ -x "$HOME/miniforge/bin/conda" ]; then
+    CONDA_EXE="$HOME/miniforge/bin/conda"
+else
+    CONDA_EXE="$(command -v conda)"
+fi
 
+eval "$("$CONDA_EXE" shell.bash hook)"
+conda activate disasteradaptivenet_cu128
+
+echo "Python executable: $(which python)"
+python --version
 # Make a job-specific copy. The original analysis has a hard-coded output path;
 # changing only the SLURM log name would NOT protect its result files.
 # Disable cuDNN in this isolated copy for the RTX PRO 6000 Blackwell GPU,
