@@ -17,7 +17,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=24G
-#SBATCH --time=03:00:00
+#SBATCH --time=30:00:00
 #SBATCH --chdir=/homes/j244s673/documents/wsu/phd/DisasterAdaptiveNet
 #SBATCH --output=slurm-R3C11-%j.out
 #SBATCH --error=slurm-R3C11-%j.err
